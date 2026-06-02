@@ -39,3 +39,20 @@ def total_suitability(
         + w_conf * confidence_score
     )
 
+
+def total_suitability_optional(
+    wind_score: float | None,
+    terrain_score: float | None,
+    accessibility_score: float,
+    confidence_score: float,
+) -> float | None:
+    """Return None when both wind and terrain scores are unavailable."""
+    if wind_score is None and terrain_score is None:
+        return None
+    return total_suitability(
+        wind_score if wind_score is not None else 0.0,
+        terrain_score if terrain_score is not None else 0.0,
+        accessibility_score=accessibility_score,
+        confidence_score=confidence_score,
+    )
+

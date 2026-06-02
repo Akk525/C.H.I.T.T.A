@@ -40,7 +40,8 @@ def _provider_label(name: str) -> str:
     labels = {
         "nasa_power": "NASA POWER",
         "opentopodata": "OpenTopoData (SRTM90m)",
-        "mock": "Mock (deterministic fallback)",
+        "mock": "Mock (accessibility proxy)",
+        "unavailable": "Unavailable",
     }
     return labels.get(name, name)
 
@@ -61,7 +62,7 @@ def _wind_date_range(sources_debug: dict[str, object]) -> str:
 def _fallback_status(used: list[str]) -> str:
     if not used:
         return "none — all primary providers succeeded"
-    return "mock fallback used for: " + ", ".join(used)
+    return "data unavailable for: " + ", ".join(used)
 
 
 def build_methodology(
@@ -95,8 +96,20 @@ def build_site_audit_trail(
     generated_at: str,
     analysis_id: str,
 ) -> list[str]:
-    wind_status = "REAL" if choice.wind != "mock" else "MOCK (fallback)"
-    elev_status = "REAL" if choice.elevation != "mock" else "MOCK (fallback)"
+    wind_status = (
+        "UNAVAILABLE"
+        if choice.wind == "unavailable"
+        else "REAL"
+        if choice.wind != "mock"
+        else "MOCK"
+    )
+    elev_status = (
+        "UNAVAILABLE"
+        if choice.elevation == "unavailable"
+        else "REAL"
+        if choice.elevation != "mock"
+        else "MOCK"
+    )
     return [
         f"Coordinate received: {latitude:.5f}, {longitude:.5f}",
         f"Wind provider queried: {_provider_label(choice.wind)} [{wind_status}]",
@@ -113,23 +126,23 @@ def build_heatmap_methodology(
     grid_size: int,
     cells: list[dict[str, Any]],
 ) -> dict[str, str]:
-    mock_wind = sum(
-        1 for c in cells if (c.get("providerStatus") or {}).get("wind") == "MOCK"
+    unavail_wind = sum(
+        1 for c in cells if (c.get("providerStatus") or {}).get("wind") == "UNAVAILABLE"
     )
-    mock_elev = sum(
-        1 for c in cells if (c.get("providerStatus") or {}).get("elevation") == "MOCK"
+    unavail_elev = sum(
+        1 for c in cells if (c.get("providerStatus") or {}).get("elevation") == "UNAVAILABLE"
     )
     total = len(cells) or 1
-    fallback_parts = []
-    if mock_wind:
-        fallback_parts.append(f"wind ({mock_wind}/{total} cells)")
-    if mock_elev:
-        fallback_parts.append(f"elevation ({mock_elev}/{total} cells)")
+    unavailable_parts = []
+    if unavail_wind:
+        unavailable_parts.append(f"wind ({unavail_wind}/{total} cells)")
+    if unavail_elev:
+        unavailable_parts.append(f"elevation ({unavail_elev}/{total} cells)")
 
     fallback_status = (
         "none — all primary providers succeeded for all cells"
-        if not fallback_parts
-        else "mock fallback used for: " + ", ".join(fallback_parts)
+        if not unavailable_parts
+        else "data unavailable for: " + ", ".join(unavailable_parts)
     )
 
     return {
@@ -157,8 +170,8 @@ def build_heatmap_audit_trail(
     return [
         f"Coordinate received: {latitude:.5f}, {longitude:.5f}",
         f"Grid generated: {grid_size}×{grid_size} over {radius_km:.0f} km radius",
-        "Wind provider queried per cell: NASA POWER (with mock fallback on failure)",
-        "Elevation provider queried per cell: OpenTopoData (with mock fallback on failure)",
+        "Wind provider queried per cell: NASA POWER (unavailable when API fails)",
+        "Elevation provider queried per cell: OpenTopoData (unavailable when API fails)",
         f"Scores computed for {cell_count} cells using formula v{SCORING_FORMULA_VERSION}",
         f"Heatmap ranked and returned at {generated_at} (analysisId: {analysis_id})",
     ]

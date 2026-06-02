@@ -22,7 +22,7 @@ from app.services.methodology import (
 )
 from app.services.pdf_export import generate_site_report_pdf
 from app.services.report import build_report
-from app.services.scoring import total_suitability
+from app.services.scoring import total_suitability_optional
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     elevation_m = metrics_fragment["elevationM"]
     terrain_complexity = metrics_fragment["terrainComplexity"]
 
-    total = total_suitability(
+    total = total_suitability_optional(
         wind_score=wind_score,
         terrain_score=terrain_score,
         accessibility_score=accessibility_score,

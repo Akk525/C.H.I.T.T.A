@@ -9,12 +9,12 @@ class SiteAnalysisRequest(BaseModel):
 
 
 class SiteAnalysisMetrics(BaseModel):
-    windScore: float
-    terrainScore: float
+    windScore: float | None = None
+    terrainScore: float | None = None
     accessibilityScore: float
     confidenceScore: float
-    elevationM: float
-    terrainComplexity: float
+    elevationM: float | None = None
+    terrainComplexity: float | None = None
 
 
 class MethodologyMetadata(BaseModel):
@@ -43,7 +43,7 @@ class SiteAnalysisResponse(BaseModel):
     auditTrail: list[str]
     inputs: SiteAnalysisRequest
     metrics: SiteAnalysisMetrics
-    totalSuitabilityScore: float
+    totalSuitabilityScore: float | None = None
     report: ConsultantReport
     debug: dict[str, object] | None = None
 
@@ -56,11 +56,11 @@ class SiteHeatmapRequest(BaseModel):
 
 
 class HeatmapCellMetrics(BaseModel):
-    windScore: float
-    terrainScore: float
+    windScore: float | None = None
+    terrainScore: float | None = None
     accessibilityScore: float
     confidenceScore: float
-    totalSuitability: float
+    totalSuitability: float | None = None
 
 
 class HeatmapProviderStatus(BaseModel):
@@ -74,6 +74,7 @@ class HeatmapCell(BaseModel):
     metrics: HeatmapCellMetrics
     label: str
     providerStatus: HeatmapProviderStatus
+    dataUnavailable: bool = False
 
 
 class SiteHeatmapResponse(BaseModel):

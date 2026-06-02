@@ -38,6 +38,10 @@ def _esc(text: str) -> str:
     return html.escape(str(text))
 
 
+def _fmt_score(v: float | None) -> str:
+    return "Unavailable" if v is None else f"{v:.0f}"
+
+
 def _bullet_list(items: list[str], style: ParagraphStyle) -> list[Any]:
     flow: list[Any] = []
     for item in items:
@@ -80,7 +84,7 @@ def _score_table(data: list[list[str]]) -> Table:
 
 def _wind_findings(analysis: SiteAnalysisResponse) -> list[str]:
     m = analysis.metrics
-    findings = [f"Wind suitability score: {m.windScore:.0f}/100."]
+    findings = [f"Wind suitability score: {_fmt_score(m.windScore)}/100."]
     debug = analysis.debug or {}
     sources = debug.get("sources") if isinstance(debug.get("sources"), dict) else None
     wind_src = sources.get("wind") if isinstance(sources, dict) else None
@@ -98,9 +102,9 @@ def _wind_findings(analysis: SiteAnalysisResponse) -> list[str]:
 def _terrain_findings(analysis: SiteAnalysisResponse) -> list[str]:
     m = analysis.metrics
     findings = [
-        f"Terrain suitability score: {m.terrainScore:.0f}/100.",
-        f"Site elevation: {m.elevationM:.0f} m.",
-        f"Terrain complexity index: {m.terrainComplexity:.2f}.",
+        f"Terrain suitability score: {_fmt_score(m.terrainScore)}/100.",
+        f"Site elevation: {_fmt_score(m.elevationM)} m." if m.elevationM is not None else "Site elevation: Unavailable.",
+        f"Terrain complexity index: {m.terrainComplexity:.2f}." if m.terrainComplexity is not None else "Terrain complexity index: Unavailable.",
     ]
     debug = analysis.debug or {}
     sources = debug.get("sources") if isinstance(debug.get("sources"), dict) else None
@@ -188,7 +192,7 @@ def generate_site_report_pdf(
         Paragraph(f"<b>Generated:</b> {_esc(ts)}", styles["Body"]),
         Spacer(1, 12),
         Paragraph(
-            f"<b>Total suitability:</b> {analysis.totalSuitabilityScore:.0f}/100",
+            f"<b>Total suitability:</b> {_fmt_score(analysis.totalSuitabilityScore)}/100",
             styles["Body"],
         ),
         Spacer(1, 16),
@@ -201,11 +205,11 @@ def generate_site_report_pdf(
     story += _section_heading("Score Summary", styles)
     score_rows = [
         ["Metric", "Score", "Notes"],
-        ["Wind", f"{m.windScore:.0f}", "Regional wind potential"],
-        ["Terrain", f"{m.terrainScore:.0f}", "Buildability & roughness"],
+        ["Wind", _fmt_score(m.windScore), "Regional wind potential"],
+        ["Terrain", _fmt_score(m.terrainScore), "Buildability & roughness"],
         ["Accessibility", f"{m.accessibilityScore:.0f}", "Road/grid proxy"],
         ["Confidence", f"{m.confidenceScore:.0f}", "Data completeness"],
-        ["Total suitability", f"{analysis.totalSuitabilityScore:.0f}", "Weighted composite"],
+        ["Total suitability", _fmt_score(analysis.totalSuitabilityScore), "Weighted composite"],
     ]
     story.append(_score_table(score_rows))
     story.append(Spacer(1, 8))
@@ -219,9 +223,9 @@ def generate_site_report_pdf(
                 [
                     str(idx),
                     cell.label,
-                    f"{cm.totalSuitability:.0f}",
-                    f"{cm.windScore:.0f}",
-                    f"{cm.terrainScore:.0f}",
+                    _fmt_score(cm.totalSuitability),
+                    _fmt_score(cm.windScore),
+                    _fmt_score(cm.terrainScore),
                     f"{cell.latitude:.4f}, {cell.longitude:.4f}",
                 ]
             )

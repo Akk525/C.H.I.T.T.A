@@ -13,7 +13,7 @@ from app.services.methodology import (
     generate_analysis_id,
     utc_now_iso,
 )
-from app.services.scoring import terrain_score_from_complexity, total_suitability
+from app.services.scoring import total_suitability_optional
 
 
 def generate_grid_points(
@@ -53,10 +53,18 @@ def generate_grid_points(
 
 
 def _provider_status(name: str) -> str:
-    return "MOCK" if name == "mock" else "REAL"
+    if name == "mock":
+        return "MOCK"
+    if name == "unavailable":
+        return "UNAVAILABLE"
+    return "REAL"
 
 
-def _cell_label(row: int, col: int, grid_size: int, total: float) -> str:
+def _round_or_none(v: float | None) -> float | None:
+    return round(v, 1) if v is not None else None
+
+
+def _cell_label(row: int, col: int, grid_size: int, total: float | None) -> str:
     center_row = (grid_size - 1) / 2.0
     center_col = (grid_size - 1) / 2.0
     dr = row - center_row
@@ -65,6 +73,9 @@ def _cell_label(row: int, col: int, grid_size: int, total: float) -> str:
     ns = "N" if dr < -0.01 else "S" if dr > 0.01 else ""
     ew = "E" if dc > 0.01 else "W" if dc < -0.01 else ""
     direction = f"{ns}{ew}".strip() or "Center"
+
+    if total is None:
+        return f"{direction} · Data unavailable"
 
     band = (
         "High"
@@ -94,83 +105,69 @@ async def score_cell(
     if cached is not None:
         return dict(cached)
 
+    access_provider = MockAccessibilityProvider()
+    accessibility_score, _ = await access_provider.get_accessibility_score(p)
+
     try:
-        access_provider = MockAccessibilityProvider()
-        accessibility_score, _ = await access_provider.get_accessibility_score(p)
-
         metrics_fragment, _sources_debug, choice = await analyze_site_realdata(p)
-
-        wind_score = metrics_fragment["windScore"]
-        terrain_score = metrics_fragment["terrainScore"]
-        confidence_score = metrics_fragment["confidenceScore"]
-
-        total = total_suitability(
-            wind_score=wind_score,
-            terrain_score=terrain_score,
-            accessibility_score=accessibility_score,
-            confidence_score=confidence_score,
-        )
-
-        cell = {
-            "latitude": p.latitude,
-            "longitude": p.longitude,
-            "metrics": {
-                "windScore": round(wind_score, 1),
-                "terrainScore": round(terrain_score, 1),
-                "accessibilityScore": round(accessibility_score, 1),
-                "confidenceScore": round(confidence_score, 1),
-                "totalSuitability": round(total, 1),
-            },
-            "label": _cell_label(row, col, grid_size, total),
-            "providerStatus": {
-                "wind": _provider_status(choice.wind),
-                "elevation": _provider_status(choice.elevation),
-            },
-        }
-        cell_analysis_cache.set(cache_key, cell)
-        return cell
-
     except Exception:
-        from app.providers.mock import (
-            MockElevationProvider,
-            MockTerrainProvider,
-            MockWindProvider,
-        )
-
-        mock_wind = MockWindProvider()
-        mock_elev = MockElevationProvider()
-        mock_terrain = MockTerrainProvider()
-        mock_access = MockAccessibilityProvider()
-
-        wind_score, _ = await mock_wind.get_wind_score(p)
-        _elev_m, _ = await mock_elev.get_elevation_m(p)
-        terrain_complexity, _ = await mock_terrain.get_terrain_complexity(p)
-        terrain_score = terrain_score_from_complexity(terrain_complexity)
-        accessibility_score, _ = await mock_access.get_accessibility_score(p)
-        confidence_score = 35.0
-
-        total = total_suitability(
-            wind_score=wind_score,
-            terrain_score=terrain_score,
-            accessibility_score=accessibility_score,
-            confidence_score=confidence_score,
-        )
-
         cell = {
             "latitude": p.latitude,
             "longitude": p.longitude,
             "metrics": {
-                "windScore": round(wind_score, 1),
-                "terrainScore": round(terrain_score, 1),
+                "windScore": None,
+                "terrainScore": None,
                 "accessibilityScore": round(accessibility_score, 1),
-                "confidenceScore": round(confidence_score, 1),
-                "totalSuitability": round(total, 1),
+                "confidenceScore": 15.0,
+                "totalSuitability": None,
             },
-            "label": _cell_label(row, col, grid_size, total),
-            "providerStatus": {"wind": "MOCK", "elevation": "MOCK"},
+            "label": _cell_label(row, col, grid_size, None),
+            "providerStatus": {"wind": "UNAVAILABLE", "elevation": "UNAVAILABLE"},
+            "dataUnavailable": True,
         }
         cell_analysis_cache.set(cache_key, cell)
         return cell
+
+    wind_score = metrics_fragment["windScore"]
+    terrain_score = metrics_fragment["terrainScore"]
+    confidence_score = metrics_fragment["confidenceScore"]
+
+    total = total_suitability_optional(
+        wind_score=wind_score,
+        terrain_score=terrain_score,
+        accessibility_score=accessibility_score,
+        confidence_score=confidence_score,
+    )
+
+    data_unavailable = total is None
+
+    cell = {
+        "latitude": p.latitude,
+        "longitude": p.longitude,
+        "metrics": {
+            "windScore": _round_or_none(wind_score),
+            "terrainScore": _round_or_none(terrain_score),
+            "accessibilityScore": round(accessibility_score, 1),
+            "confidenceScore": round(confidence_score, 1),
+            "totalSuitability": _round_or_none(total),
+        },
+        "label": _cell_label(row, col, grid_size, total),
+        "providerStatus": {
+            "wind": _provider_status(choice.wind),
+            "elevation": _provider_status(choice.elevation),
+        },
+        "dataUnavailable": data_unavailable,
+    }
+    cell_analysis_cache.set(cache_key, cell)
+    return cell
+
+
+def _cell_sort_key(cell: dict[str, object]) -> float:
+    metrics = cell.get("metrics")
+    if not isinstance(metrics, dict):
+        return -1.0
+    total = metrics.get("totalSuitability")
+    return float(total) if total is not None else -1.0
 
 
 async def build_heatmap(
@@ -201,11 +198,12 @@ async def build_heatmap(
         else:
             cells.append(_public_cell(result))
 
-    sorted_cells = sorted(
-        cells,
-        key=lambda c: float((c.get("metrics") or {}).get("totalSuitability", 0)),  # type: ignore[union-attr]
-        reverse=True,
-    )
+    scored_cells = [
+        c
+        for c in cells
+        if _cell_sort_key(c) >= 0
+    ]
+    sorted_cells = sorted(scored_cells, key=_cell_sort_key, reverse=True)
 
     generated_at = utc_now_iso()
     analysis_id = generate_analysis_id()
