@@ -14,8 +14,14 @@ from app.providers.base import LatLng
 from app.providers.mock import MockAccessibilityProvider
 from app.services.analysis import analyze_site_realdata
 from app.services.heatmap import build_heatmap
-from app.services.report import build_report
+from app.services.methodology import (
+    build_methodology,
+    build_site_audit_trail,
+    generate_analysis_id,
+    utc_now_iso,
+)
 from app.services.pdf_export import generate_site_report_pdf
+from app.services.report import build_report
 from app.services.scoring import total_suitability
 
 router = APIRouter()
@@ -26,10 +32,9 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     p = LatLng(latitude=req.latitude, longitude=req.longitude)
 
     access_provider = MockAccessibilityProvider()
-
     accessibility_score, acc_dbg = await access_provider.get_accessibility_score(p)
 
-    metrics_fragment, sources_debug, _choice = await analyze_site_realdata(p)
+    metrics_fragment, sources_debug, choice = await analyze_site_realdata(p)
     wind_score = metrics_fragment["windScore"]
     terrain_score = metrics_fragment["terrainScore"]
     confidence_score = metrics_fragment["confidenceScore"]
@@ -58,7 +63,21 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
         ],
     )
 
+    generated_at = utc_now_iso()
+    analysis_id = generate_analysis_id()
+    methodology = build_methodology(sources_debug, choice, generated_at=generated_at)
+    audit_trail = build_site_audit_trail(
+        latitude=req.latitude,
+        longitude=req.longitude,
+        choice=choice,
+        generated_at=generated_at,
+        analysis_id=analysis_id,
+    )
+
     return SiteAnalysisResponse(
+        analysisId=analysis_id,
+        methodology=methodology,  # type: ignore[arg-type]
+        auditTrail=audit_trail,
         inputs=req,
         metrics={
             "windScore": wind_score,
@@ -86,7 +105,6 @@ async def site_heatmap(req: SiteHeatmapRequest) -> SiteHeatmapResponse:
         grid_size=req.gridSize,
     )
     return SiteHeatmapResponse(**result)  # type: ignore[arg-type]
-
 
 
 @router.post("/api/site-report/export")

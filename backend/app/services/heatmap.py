@@ -7,6 +7,12 @@ from app.providers.base import LatLng
 from app.providers.mock import MockAccessibilityProvider
 from app.services.analysis import analyze_site_realdata
 from app.services.cache import cell_analysis_cache, coord_cache_key
+from app.services.methodology import (
+    build_heatmap_audit_trail,
+    build_heatmap_methodology,
+    generate_analysis_id,
+    utc_now_iso,
+)
 from app.services.scoring import terrain_score_from_complexity, total_suitability
 
 
@@ -201,7 +207,28 @@ async def build_heatmap(
         reverse=True,
     )
 
+    generated_at = utc_now_iso()
+    analysis_id = generate_analysis_id()
+    methodology = build_heatmap_methodology(
+        generated_at=generated_at,
+        radius_km=radius_km,
+        grid_size=grid_size,
+        cells=cells,
+    )
+    audit_trail = build_heatmap_audit_trail(
+        latitude=center.latitude,
+        longitude=center.longitude,
+        radius_km=radius_km,
+        grid_size=grid_size,
+        cell_count=len(cells),
+        generated_at=generated_at,
+        analysis_id=analysis_id,
+    )
+
     return {
+        "analysisId": analysis_id,
+        "methodology": methodology,
+        "auditTrail": audit_trail,
         "center": {"latitude": center.latitude, "longitude": center.longitude},
         "radiusKm": radius_km,
         "gridSize": grid_size,

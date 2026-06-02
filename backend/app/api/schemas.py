@@ -17,6 +17,17 @@ class SiteAnalysisMetrics(BaseModel):
     terrainComplexity: float
 
 
+class MethodologyMetadata(BaseModel):
+    windDataSource: str
+    windDateRange: str
+    elevationSource: str
+    scoringFormulaVersion: str
+    terrainRoughnessMethod: str
+    confidenceCalculationMethod: str
+    fallbackStatus: str
+    generatedAt: str
+
+
 class ConsultantReport(BaseModel):
     executiveSummary: str
     siteStrengths: list[str]
@@ -27,6 +38,9 @@ class ConsultantReport(BaseModel):
 
 
 class SiteAnalysisResponse(BaseModel):
+    analysisId: str
+    methodology: MethodologyMetadata
+    auditTrail: list[str]
     inputs: SiteAnalysisRequest
     metrics: SiteAnalysisMetrics
     totalSuitabilityScore: float
@@ -63,6 +77,9 @@ class HeatmapCell(BaseModel):
 
 
 class SiteHeatmapResponse(BaseModel):
+    analysisId: str
+    methodology: MethodologyMetadata
+    auditTrail: list[str]
     center: SiteAnalysisRequest
     radiusKm: float
     gridSize: int
