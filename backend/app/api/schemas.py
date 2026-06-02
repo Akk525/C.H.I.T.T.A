@@ -69,3 +69,8 @@ class SiteHeatmapResponse(BaseModel):
     cells: list[HeatmapCell]
     bestCells: list[HeatmapCell]
 
+
+
+class SiteReportExportRequest(BaseModel):
+    analysis: SiteAnalysisResponse
+    heatmap: SiteHeatmapResponse | None = None

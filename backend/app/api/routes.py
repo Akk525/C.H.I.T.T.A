@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import Response
 
 from app.api.schemas import (
     SiteAnalysisRequest,
     SiteAnalysisResponse,
     SiteHeatmapRequest,
     SiteHeatmapResponse,
+    SiteReportExportRequest,
 )
 from app.providers.base import LatLng
 from app.providers.mock import MockAccessibilityProvider
 from app.services.analysis import analyze_site_realdata
 from app.services.heatmap import build_heatmap
 from app.services.report import build_report
+from app.services.pdf_export import generate_site_report_pdf
 from app.services.scoring import total_suitability
 
 router = APIRouter()
@@ -84,3 +87,15 @@ async def site_heatmap(req: SiteHeatmapRequest) -> SiteHeatmapResponse:
     )
     return SiteHeatmapResponse(**result)  # type: ignore[arg-type]
 
+
+
+@router.post("/api/site-report/export")
+async def export_site_report(req: SiteReportExportRequest) -> Response:
+    pdf_bytes = generate_site_report_pdf(req.analysis, req.heatmap)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="chitta-site-assessment.pdf"'
+        },
+    )
