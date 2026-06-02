@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
+import { EconomicsPanel } from "@/components/EconomicsPanel";
+import { ConsultantReportView } from "@/components/ConsultantReport";
 import { LocationSearch } from "@/components/LocationSearch";
 import { MapboxMap } from "@/components/MapboxMap";
-import { ScoreCard } from "@/components/ScoreCard";
-import { ConsultantReportView } from "@/components/ConsultantReport";
 import { MethodologyAuditPanel } from "@/components/MethodologyAuditPanel";
-import { TopCandidateZones } from "@/components/TopCandidateZones";
 import { SampleSiteButtons } from "@/components/SampleSiteButtons";
+import { ScoreCard } from "@/components/ScoreCard";
+import { TopCandidateZones } from "@/components/TopCandidateZones";
 import { exportSiteReport, fetchSiteAnalysis, fetchSiteHeatmap } from "@/lib/api";
 import { DEMO_SITES, getDemoSite, type DemoSite } from "@/lib/demoSites";
 import type { HeatmapCell, LatLng, SiteAnalysisResponse, SiteHeatmapResponse } from "@/lib/types";
@@ -50,7 +52,7 @@ function providerBadge(v: unknown) {
 type DebugSources = {
   wind?: { provider?: string };
   elevation?: { provider?: string };
-  accessibility?: { provider?: string };
+  infrastructure?: { provider?: string };
 };
 
 export default function SiteExplorerPage() {
@@ -266,37 +268,62 @@ export default function SiteExplorerPage() {
         <section className="lg:col-span-5 flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
             <ScoreCard
-              title="Wind score"
+              title="Wind"
               value={formatScore(metrics?.windScore, loading)}
-              subtitle={`Wind potential • ${providerBadge(sources?.wind?.provider)}`}
+              subtitle={
+                metrics?.windSpeedAtHub != null
+                  ? `${metrics.windSpeedAtHub.toFixed(1)} m/s at hub • ${providerBadge(sources?.wind?.provider)}`
+                  : `Wind potential • ${providerBadge(sources?.wind?.provider)}`
+              }
               tone={metrics ? toneForScore(metrics.windScore) : "neutral"}
             />
             <ScoreCard
-              title="Terrain score"
+              title="Terrain"
               value={formatScore(metrics?.terrainScore, loading)}
-              subtitle={`Buildability • ${providerBadge(sources?.elevation?.provider)}`}
+              subtitle={
+                metrics?.elevationM != null
+                  ? `${Math.round(metrics.elevationM)}m elev • slope ${metrics.slopePct?.toFixed(1) ?? "?"}%`
+                  : `Buildability • ${providerBadge(sources?.elevation?.provider)}`
+              }
               tone={metrics ? toneForScore(metrics.terrainScore) : "neutral"}
             />
             <ScoreCard
-              title="Accessibility"
-              value={formatScore(metrics?.accessibilityScore, loading)}
-              subtitle={`Road/grid proxy • ${providerBadge(
-                sources?.accessibility?.provider ?? "mock",
-              )}`}
-              tone={metrics ? toneForScore(metrics.accessibilityScore) : "neutral"}
+              title="Infrastructure"
+              value={formatScore(metrics?.infrastructureScore, loading)}
+              subtitle={
+                metrics?.nearestRoadM != null
+                  ? `Road ${(metrics.nearestRoadM / 1000).toFixed(1)} km • ${providerBadge(sources?.infrastructure?.provider ?? "osm_overpass")}`
+                  : `Road & grid access • ${providerBadge(sources?.infrastructure?.provider ?? "unavailable")}`
+              }
+              tone={metrics ? toneForScore(metrics.infrastructureScore) : "neutral"}
+            />
+            <ScoreCard
+              title="Environmental"
+              value={formatScore(metrics?.environmentalScore, loading)}
+              subtitle={
+                metrics?.landCoverClass
+                  ? `${metrics.landCoverClass} • PA risk: ${metrics.protectedAreaRisk ?? "unknown"}`
+                  : `Land cover & protected areas`
+              }
+              tone={metrics ? toneForScore(metrics.environmentalScore) : "neutral"}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreCard
+              title="Population"
+              value={formatScore(metrics?.populationScore, loading)}
+              subtitle={
+                metrics?.settlementCount15km != null
+                  ? `${metrics.settlementCount15km} settlements (15 km)`
+                  : "Settlement density proxy"
+              }
+              tone={metrics ? toneForScore(metrics.populationScore) : "neutral"}
             />
             <ScoreCard
               title="Confidence"
               value={formatScore(metrics?.confidenceScore, loading)}
-              subtitle={`Data maturity • ${
-                providerBadge(sources?.wind?.provider) === "REAL" ||
-                providerBadge(sources?.elevation?.provider) === "REAL"
-                  ? "REAL-ASSISTED"
-                  : providerBadge(sources?.wind?.provider) === "UNAVAILABLE" &&
-                      providerBadge(sources?.elevation?.provider) === "UNAVAILABLE"
-                    ? "UNAVAILABLE"
-                    : "PARTIAL"
-              }`}
+              subtitle={`Data completeness v2.0`}
               tone={metrics ? toneForScore(metrics.confidenceScore) : "neutral"}
             />
           </div>
@@ -306,10 +333,10 @@ export default function SiteExplorerPage() {
               title="Total suitability"
               value={formatScore(total, loading && !analysis)}
               subtitle={
-                metrics?.elevationM != null && metrics.terrainComplexity != null
-                  ? `Elevation: ${Math.round(metrics.elevationM)}m • Terrain complexity: ${metrics.terrainComplexity.toFixed(2)}`
+                total != null
+                  ? `v2: 35% wind + 20% terrain + 15% infra + 10% env + 10% pop + 10% conf`
                   : metrics
-                    ? "Some primary data sources unavailable"
+                    ? "Wind or terrain data unavailable"
                     : "Composite heuristic score"
               }
               tone={analysis ? toneForScore(total) : "neutral"}
@@ -357,6 +384,23 @@ export default function SiteExplorerPage() {
               {exportError ? (
                 <div className="text-xs text-rose-700">{exportError}</div>
               ) : null}
+            </div>
+          ) : null}
+
+          {analysis?.economicMetrics ? (
+            <div className="mt-1">
+              <EconomicsPanel
+                metrics={analysis.economicMetrics}
+                windSpeedAtHub={metrics?.windSpeedAtHub ?? null}
+                terrainScore={metrics?.terrainScore ?? null}
+                infraScore={metrics?.infrastructureScore ?? null}
+              />
+            </div>
+          ) : null}
+
+          {analysis?.agentAnalysis ? (
+            <div className="mt-1">
+              <AgentAnalysisPanel agentAnalysis={analysis.agentAnalysis} />
             </div>
           ) : null}
 

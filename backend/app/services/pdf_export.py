@@ -85,13 +85,16 @@ def _score_table(data: list[list[str]]) -> Table:
 def _wind_findings(analysis: SiteAnalysisResponse) -> list[str]:
     m = analysis.metrics
     findings = [f"Wind suitability score: {_fmt_score(m.windScore)}/100."]
+    if m.windSpeedAtHub is not None:
+        findings.append(f"Mean wind speed at hub height: {m.windSpeedAtHub:.2f} m/s.")
     debug = analysis.debug or {}
     sources = debug.get("sources") if isinstance(debug.get("sources"), dict) else None
     wind_src = sources.get("wind") if isinstance(sources, dict) else None
     if isinstance(wind_src, dict):
         raw = wind_src.get("raw") if isinstance(wind_src.get("raw"), dict) else {}
-        if raw.get("mean_speed_mps") is not None:
-            findings.append(f"Mean wind speed (source data): {float(raw['mean_speed_mps']):.2f} m/s.")
+        hub_h = raw.get("hub_height_m")
+        if hub_h is not None:
+            findings.append(f"Data height: {hub_h} m (highest available from NASA POWER).")
         findings.append(f"Wind data provider: {wind_src.get('provider', 'unknown')}.")
     for item in analysis.report.siteStrengths + analysis.report.risks:
         if "wind" in item.lower():
@@ -199,17 +202,35 @@ def generate_site_report_pdf(
     ]
 
     story += _section_heading("Executive Summary", styles)
+    # If agent analysis present, prepend coordinator decision label
+    if analysis.agentAnalysis:
+        coord = analysis.agentAnalysis.coordinator
+        dec_label = coord.finalDecision.upper()
+        story.append(
+            Paragraph(
+                f"<b>Coordinator assessment: {_esc(dec_label)}</b>",
+                ParagraphStyle(
+                    "DecisionBadge",
+                    parent=styles["Body"],
+                    fontSize=10,
+                    textColor=ACCENT,
+                    spaceAfter=4,
+                ),
+            )
+        )
     story.append(Paragraph(_esc(analysis.report.executiveSummary), styles["Body"]))
     story.append(Spacer(1, 8))
 
     story += _section_heading("Score Summary", styles)
-    score_rows = [
-        ["Metric", "Score", "Notes"],
-        ["Wind", _fmt_score(m.windScore), "Regional wind potential"],
-        ["Terrain", _fmt_score(m.terrainScore), "Buildability & roughness"],
-        ["Accessibility", f"{m.accessibilityScore:.0f}", "Road/grid proxy"],
-        ["Confidence", f"{m.confidenceScore:.0f}", "Data completeness"],
-        ["Total suitability", _fmt_score(analysis.totalSuitabilityScore), "Weighted composite"],
+    score_rows: list[list[str]] = [["Metric", "Score", "Notes"]]
+    score_rows += [
+        ["Wind", _fmt_score(m.windScore), f"Hub height: {m.windSpeedAtHub:.1f} m/s" if m.windSpeedAtHub else "Regional wind potential"],
+        ["Terrain", _fmt_score(m.terrainScore), f"Slope: {m.slopePct:.1f}%" if m.slopePct else "Buildability & roughness"],
+        ["Infrastructure", _fmt_score(m.infrastructureScore), "Road & grid access (OSM)"],
+        ["Environmental", _fmt_score(m.environmentalScore), f"Land cover: {m.landCoverClass or 'unknown'}"],
+        ["Population", _fmt_score(m.populationScore), f"{m.settlementCount15km or 0} settlements (15 km)"],
+        ["Confidence", f"{m.confidenceScore:.0f}", "Data source completeness"],
+        ["Total suitability", _fmt_score(analysis.totalSuitabilityScore), "Weighted composite (v2.0.0)"],
     ]
     story.append(_score_table(score_rows))
     story.append(Spacer(1, 8))
@@ -257,6 +278,51 @@ def generate_site_report_pdf(
                 styles["Subtitle"],
             )
         )
+
+    # Agent analysis section
+    if analysis.agentAnalysis:
+        coord = analysis.agentAnalysis.coordinator
+        story += _section_heading("Agent Analysis", styles)
+        if coord.topStrengths:
+            story.append(Paragraph("<b>Key strengths:</b>", styles["Body"]))
+            story += _bullet_list(coord.topStrengths, styles["Body"])
+        if coord.topRisks:
+            story.append(Paragraph("<b>Key risks:</b>", styles["Body"]))
+            story += _bullet_list(coord.topRisks, styles["Body"])
+        if coord.contradictionNotes:
+            story.append(Paragraph("<b>Contradictions:</b>", styles["Body"]))
+            story += _bullet_list(coord.contradictionNotes, styles["Body"])
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Per-agent summaries:</b>", styles["Body"]))
+        for agent in analysis.agentAnalysis.agents:
+            story.append(
+                Paragraph(
+                    f"<b>{_esc(agent.agentName)}</b> [{_esc(agent.status)}]: {_esc(agent.summary)}",
+                    styles["Body"],
+                )
+            )
+            story.append(Spacer(1, 3))
+        story.append(Spacer(1, 6))
+
+    # Economic Feasibility section
+    if analysis.economicMetrics:
+        em = analysis.economicMetrics
+        a = em.assumptions
+        story += _section_heading("Economic Feasibility (Preliminary)", styles)
+        eco_rows = [
+            ["Metric", "Value", "Notes"],
+            ["Capacity factor", f"{em.capacityFactor:.1%}", "Estimated from hub-height wind speed"],
+            ["Annual energy (AEP)", f"{em.annualEnergyMwh:,.0f} MWh/yr", f"{a.turbineCount} × {a.turbineRatingMw}MW turbines"],
+            ["CAPEX estimate", f"${em.capexUsd / 1e6:.1f}M", f"${a.capexUsdPerMw / 1e6:.2f}M/MW baseline"],
+            ["OPEX/year", f"${em.opexUsdPerYear / 1e3:.0f}k", f"{a.opexPctOfCapex * 100:.0f}% of CAPEX"],
+            ["Annual revenue", f"${em.annualRevenueUsd / 1e6:.2f}M", f"@ ${a.electricityPriceUsdPerMwh}/MWh"],
+            ["Simple payback", f"{em.paybackYears:.1f} yr" if em.paybackYears else "N/A", "Before financing costs"],
+            ["LCOE", f"${em.lcoeUsdPerMwh:.1f}/MWh", f"{a.discountRate*100:.0f}% discount, {a.projectLifeYears}yr life"],
+        ]
+        story.append(_score_table(eco_rows))
+        story.append(Spacer(1, 6))
+        story += _bullet_list(em.limitations[:4], styles["Disclaimer"])
+        story.append(Spacer(1, 8))
 
     story += _section_heading("Wind Findings", styles)
     story += _bullet_list(_wind_findings(analysis), styles["Body"])

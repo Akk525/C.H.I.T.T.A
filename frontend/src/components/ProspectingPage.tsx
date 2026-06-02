@@ -1,0 +1,410 @@
+"use client";
+
+import Link from "next/link";
+import { useRef, useState } from "react";
+import { ProspectingCandidatePanel } from "@/components/ProspectingCandidatePanel";
+import { ProspectingClusterCard } from "@/components/ProspectingClusterCard";
+import { ProspectingMap } from "@/components/ProspectingMap";
+import { runProspecting } from "@/lib/api";
+import type { LatLng, ProspectingCandidate, ProspectingCluster, ProspectingResponse } from "@/lib/types";
+
+// ── Sample regions ────────────────────────────────────────────────────────────
+const SAMPLE_REGIONS = [
+  {
+    id: "karnataka",
+    label: "Karnataka Wind Corridor",
+    centerLatitude: 14.5,
+    centerLongitude: 76.4,
+    radiusKm: 75,
+    gridSize: 5,
+  },
+  {
+    id: "kutch",
+    label: "Kutch Wind Belt",
+    centerLatitude: 23.5,
+    centerLongitude: 70.0,
+    radiusKm: 80,
+    gridSize: 5,
+  },
+  {
+    id: "tirunelveli",
+    label: "Tirunelveli Corridor",
+    centerLatitude: 8.7,
+    centerLongitude: 77.5,
+    radiusKm: 60,
+    gridSize: 5,
+  },
+] as const;
+
+const GRID_OPTIONS = [3, 4, 5, 6, 7] as const;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function scoreColour(v: number | null): string {
+  if (v === null) return "text-slate-400";
+  if (v >= 70) return "text-emerald-700";
+  if (v >= 55) return "text-blue-700";
+  if (v >= 40) return "text-amber-700";
+  return "text-rose-700";
+}
+
+function decisionBadge(d: string | null): React.ReactNode {
+  if (!d) return null;
+  const cls: Record<string, string> = {
+    promising: "bg-emerald-100 text-emerald-800",
+    mixed:     "bg-blue-100 text-blue-800",
+    caution:   "bg-amber-100 text-amber-800",
+    poor:      "bg-rose-100 text-rose-800",
+  };
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls[d] ?? "bg-slate-100 text-slate-600"}`}>
+      {d}
+    </span>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function ProspectingPage() {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim() || null;
+
+  const [regionName, setRegionName] = useState("Karnataka Wind Corridor");
+  const [centerLat, setCenterLat] = useState(14.5);
+  const [centerLng, setCenterLng] = useState(76.4);
+  const [radiusKm, setRadiusKm] = useState(75);
+  const [gridSize, setGridSize] = useState<number>(5);
+
+  const [result, setResult] = useState<ProspectingResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<ProspectingCandidate | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const mapCenter: LatLng = { latitude: centerLat, longitude: centerLng };
+  const candidateCount = gridSize * gridSize;
+
+  function applyPreset(region: (typeof SAMPLE_REGIONS)[number]) {
+    setRegionName(region.label);
+    setCenterLat(region.centerLatitude);
+    setCenterLng(region.centerLongitude);
+    setRadiusKm(region.radiusKm);
+    setGridSize(region.gridSize);
+    setResult(null);
+    setSelectedCandidate(null);
+    setError(null);
+  }
+
+  async function handleRun() {
+    setError(null);
+    setLoading(true);
+    setResult(null);
+    setSelectedCandidate(null);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await runProspecting(
+        {
+          regionName,
+          centerLatitude: centerLat,
+          centerLongitude: centerLng,
+          radiusKm,
+          gridSize,
+          maxCandidates: candidateCount,
+        },
+        abortRef.current.signal,
+      );
+      setResult(res);
+    } catch (e: unknown) {
+      if ((e as Error)?.name === "AbortError") return;
+      setError((e instanceof Error ? e.message : "Unknown error") ?? "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleFocusCluster(cluster: ProspectingCluster) {
+    // Find the highest-scoring candidate in this cluster region
+    if (!result) return;
+    const nearest = result.candidates
+      .filter((c) => c.totalSuitability !== null)
+      .sort((a, b) => {
+        const da = Math.hypot(a.latitude - cluster.centroidLatitude, a.longitude - cluster.centroidLongitude);
+        const db = Math.hypot(b.latitude - cluster.centroidLatitude, b.longitude - cluster.centroidLongitude);
+        return da - db;
+      })[0];
+    if (nearest) setSelectedCandidate(nearest);
+  }
+
+  return (
+    <div className="flex min-h-full flex-col bg-gradient-to-b from-emerald-50 via-white to-white">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white/70 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <Link href="/" className="text-xs text-slate-500 hover:text-emerald-700">← Home</Link>
+              <Link href="/demo" className="text-xs text-slate-500 hover:text-emerald-700">Site Analysis</Link>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800">
+                Prospecting
+              </span>
+            </div>
+            <div className="text-xs font-semibold tracking-[0.18em] text-emerald-700">CHITTA</div>
+            <h1 className="text-lg font-semibold tracking-tight text-slate-950">
+              Regional Wind Prospecting
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Screen candidate sites across a region and surface high-potential wind corridors.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Config panel */}
+        <aside className="lg:col-span-3 space-y-4">
+          <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-3">
+            <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">REGION PRESETS</div>
+            <div className="space-y-2">
+              {SAMPLE_REGIONS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => applyPreset(r)}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                    regionName === r.label
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                      : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="font-medium">{r.label}</div>
+                  <div className="text-slate-400">{r.centerLatitude}°N, {r.centerLongitude}°E · {r.radiusKm}km</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-4">
+            <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">CONFIGURATION</div>
+
+            <div>
+              <label className="text-xs text-slate-600 block mb-1">Region name</label>
+              <input
+                type="text"
+                value={regionName}
+                onChange={(e) => setRegionName(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-600 block mb-1">Centre lat</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={centerLat}
+                  onChange={(e) => setCenterLat(parseFloat(e.target.value) || 0)}
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 block mb-1">Centre lng</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={centerLng}
+                  onChange={(e) => setCenterLng(parseFloat(e.target.value) || 0)}
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-600 block mb-1">
+                Radius: <span className="font-semibold text-slate-800">{radiusKm} km</span>
+              </label>
+              <input
+                type="range"
+                min={20}
+                max={200}
+                step={5}
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(parseInt(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400">
+                <span>20 km</span><span>200 km</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-600 block mb-1">Grid size</label>
+              <div className="flex gap-1">
+                {GRID_OPTIONS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGridSize(g)}
+                    className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${
+                      gridSize === g
+                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {g}×{g}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-1 text-[10px] text-slate-400">{candidateCount} candidate points</div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRun}
+              disabled={loading}
+              className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? `Screening ${candidateCount} sites…`
+                : "Run Prospecting"}
+            </button>
+
+            {error && (
+              <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</div>
+            )}
+          </div>
+
+          {/* Methodology summary */}
+          {result && (
+            <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-2">
+              <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">RUN SUMMARY</div>
+              <div className="text-xs text-slate-600 space-y-1">
+                <div><span className="font-medium">{result.candidateCount}</span> candidates screened</div>
+                <div><span className="font-medium">{result.enrichedCount}</span> fully enriched</div>
+                <div><span className="font-medium">{result.clusters.length}</span> zones identified</div>
+                <div className="text-slate-400">{result.generatedAt}</div>
+              </div>
+              <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2">
+                {result.auditTrail.map((line, i) => <div key={i}>{line}</div>)}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* Map + results */}
+        <div className="lg:col-span-9 space-y-4">
+          {/* Map */}
+          <div className="h-[440px] sm:h-[520px]">
+            <ProspectingMap
+              token={token}
+              center={mapCenter}
+              candidates={result?.candidates ?? []}
+              selectedId={selectedCandidate?.id ?? null}
+              onSelect={setSelectedCandidate}
+            />
+          </div>
+
+          {/* Candidate detail panel */}
+          {selectedCandidate && (
+            <ProspectingCandidatePanel
+              candidate={selectedCandidate}
+              onClose={() => setSelectedCandidate(null)}
+            />
+          )}
+
+          {/* Cluster cards */}
+          {result && result.clusters.length > 0 && (
+            <div>
+              <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-slate-500">
+                IDENTIFIED ZONES
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {result.clusters.map((cl) => (
+                  <ProspectingClusterCard
+                    key={cl.id}
+                    cluster={cl}
+                    onFocus={handleFocusCluster}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top candidates table */}
+          {result && result.topCandidates.length > 0 && (
+            <div>
+              <div className="mb-2 text-xs font-semibold tracking-[0.12em] text-slate-500">
+                TOP CANDIDATES (fully enriched)
+              </div>
+              <div className="chitta-card overflow-hidden rounded-xl bg-white shadow-sm">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] text-slate-500">
+                      <th className="px-3 py-2.5 font-medium">Rank</th>
+                      <th className="px-3 py-2.5 font-medium">Score</th>
+                      <th className="px-3 py-2.5 font-medium">Decision</th>
+                      <th className="px-3 py-2.5 font-medium">Wind</th>
+                      <th className="px-3 py-2.5 font-medium">Terrain</th>
+                      <th className="px-3 py-2.5 font-medium">CF</th>
+                      <th className="px-3 py-2.5 font-medium">LCOE</th>
+                      <th className="px-3 py-2.5 font-medium">Payback</th>
+                      <th className="px-3 py-2.5 font-medium">Coordinates</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.topCandidates.map((c, i) => (
+                      <tr
+                        key={c.id}
+                        onClick={() => setSelectedCandidate(c)}
+                        className={`border-b border-slate-50 cursor-pointer transition-colors hover:bg-slate-50 ${
+                          selectedCandidate?.id === c.id ? "bg-emerald-50" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-slate-400">#{i + 1}</td>
+                        <td className={`px-3 py-2 font-semibold ${scoreColour(c.totalSuitability)}`}>
+                          {c.totalSuitability?.toFixed(0) ?? "–"}
+                        </td>
+                        <td className="px-3 py-2">{decisionBadge(c.finalDecision)}</td>
+                        <td className="px-3 py-2 text-slate-600">{c.windScore?.toFixed(0) ?? "–"}</td>
+                        <td className="px-3 py-2 text-slate-600">{c.terrainScore?.toFixed(0) ?? "–"}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {c.capacityFactor != null ? `${(c.capacityFactor * 100).toFixed(0)}%` : "–"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {c.lcoeUsdPerMwh != null ? `$${c.lcoeUsdPerMwh.toFixed(0)}` : "–"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {c.paybackYears != null ? `${c.paybackYears.toFixed(0)}yr` : "–"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-400">
+                          {c.latitude.toFixed(3)}, {c.longitude.toFixed(3)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!result && !loading && (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 p-8 text-center text-sm text-slate-400">
+              Select a region preset or configure custom parameters, then run prospecting to see results.
+            </div>
+          )}
+
+          {loading && (
+            <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 p-8 text-center">
+              <div className="text-sm font-medium text-emerald-800">
+                Screening {candidateCount} candidate sites across {regionName}…
+              </div>
+              <div className="mt-1 text-xs text-emerald-600">
+                Pass 1: wind + terrain · Pass 2: full enriched analysis for top sites
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}

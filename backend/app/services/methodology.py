@@ -6,25 +6,30 @@ from typing import Any
 
 from app.services.analysis import ProviderChoice
 
-SCORING_FORMULA_VERSION = "1.0.0"
+SCORING_FORMULA_VERSION = "2.1.0"
 
 TERRAIN_ROUGHNESS_METHOD = (
     "Sample 12 elevation points in a 1.5 km ring; compute standard deviation; "
-    "map stdev to terrain complexity (0.15–2.0); invert to buildability score."
+    "map stdev to terrain complexity (0.15–2.0); invert to buildability score. "
+    "Also computes slope (elevation range / 2×radius) and ridge score (stdev of first differences)."
 )
 
 CONFIDENCE_CALCULATION_METHOD = (
-    "Start at 35; add 30 if real wind data succeeds, 25 if real elevation succeeds, "
-    "10 bonus if both succeed; subtract up to 15 for insufficient sample counts."
+    "Start at 20; add 25 for real wind, 20 for real elevation, 15 for real OSM infrastructure, "
+    "10 for land cover data, 10 for protected area data; +5 bonus if wind+elevation+infra all real; "
+    "subtract up to 15 for insufficient sample counts."
 )
 
 WIND_SCORE_FORMULA_PLAIN = (
     "Wind score = 70% mean-speed score (3–10 m/s → 0–100) + 30% consistency score "
-    "(lower day-to-day variability yields a higher score)."
+    "(lower day-to-day variability yields a higher score). "
+    "Uses highest available NASA POWER height: WS100M preferred, then WS50M, then WS10M."
 )
 
 TOTAL_SUITABILITY_FORMULA_PLAIN = (
-    "Total suitability = 40% wind + 25% terrain + 20% accessibility + 15% confidence."
+    "Total suitability v2 = 35% wind + 20% terrain + 15% infrastructure + "
+    "10% environmental (land cover + protected areas) + 10% population proxy + 10% confidence. "
+    "Falls back to legacy 40/25/20/15 when OSM data is unavailable."
 )
 
 
@@ -38,25 +43,43 @@ def generate_analysis_id() -> str:
 
 def _provider_label(name: str) -> str:
     labels = {
-        "nasa_power": "NASA POWER",
+        "nasa_power": "NASA POWER (WS10M/WS50M/WS100M)",
         "opentopodata": "OpenTopoData (SRTM90m)",
-        "mock": "Mock (accessibility proxy)",
+        "osm_overpass": "OpenStreetMap (Overpass API)",
+        "mock": "Mock (fallback proxy)",
         "unavailable": "Unavailable",
     }
     return labels.get(name, name)
 
 
 def _wind_date_range(sources_debug: dict[str, object]) -> str:
-    wind = (sources_debug.get("sources") or {}).get("wind") if isinstance(sources_debug.get("sources"), dict) else None
-    if not isinstance(wind, dict):
+    wind_src = (sources_debug.get("sources") or {}).get("wind") if isinstance(sources_debug.get("sources"), dict) else None
+    if not isinstance(wind_src, dict):
         return "Unknown"
-    dbg = wind.get("debug")
-    if isinstance(dbg, dict):
-        start = dbg.get("periodStart")
-        end = dbg.get("periodEnd")
-        if start and end:
-            return f"{start} to {end} (daily WS10M)"
-    return "Last 365 days (daily WS10M, NASA POWER target)"
+    dbg = wind_src.get("debug")
+    if not isinstance(dbg, dict):
+        return "Unknown"
+
+    start = dbg.get("requestedStartDate") or dbg.get("periodStart")
+    end = dbg.get("requestedEndDate") or dbg.get("periodEnd")
+    latest = dbg.get("latestCompletedDate")
+    days = dbg.get("daysReturned")
+    params_used = dbg.get("parametersUsed")
+    height = dbg.get("primary_height_m")
+
+    if not start or not end:
+        return "Last 365 days (NASA POWER target)"
+
+    height_label = f"WS{height}M" if height else "WS10M"
+    if params_used and params_used != "none":
+        height_label = params_used.split(" ")[0]  # "WS100M", "WS50M", or "WS10M"
+
+    base = f"{start} to {end} (daily {height_label}, NASA POWER)"
+    if latest:
+        base += f" — latest data: {latest}"
+    if days:
+        base += f", {days} days returned"
+    return base
 
 
 def _fallback_status(used: list[str]) -> str:
@@ -75,17 +98,28 @@ def build_methodology(
     quality = sources_debug.get("quality")
     if isinstance(quality, dict) and isinstance(quality.get("usedFallbacks"), list):
         used = [str(x) for x in quality["usedFallbacks"]]
+    if hasattr(choice, "infrastructure") and choice.infrastructure == "unavailable":
+        used.append("infrastructure")
 
     return {
         "windDataSource": _provider_label(choice.wind),
         "windDateRange": _wind_date_range(sources_debug),
         "elevationSource": _provider_label(choice.elevation),
+        "infrastructureSource": _provider_label(getattr(choice, "infrastructure", "unavailable")),
         "scoringFormulaVersion": SCORING_FORMULA_VERSION,
         "terrainRoughnessMethod": TERRAIN_ROUGHNESS_METHOD,
         "confidenceCalculationMethod": CONFIDENCE_CALCULATION_METHOD,
         "fallbackStatus": _fallback_status(used),
         "generatedAt": generated_at or utc_now_iso(),
     }
+
+
+def _status_label(name: str) -> str:
+    if name == "unavailable":
+        return "UNAVAILABLE"
+    if name == "mock":
+        return "MOCK"
+    return "REAL"
 
 
 def build_site_audit_trail(
@@ -96,27 +130,16 @@ def build_site_audit_trail(
     generated_at: str,
     analysis_id: str,
 ) -> list[str]:
-    wind_status = (
-        "UNAVAILABLE"
-        if choice.wind == "unavailable"
-        else "REAL"
-        if choice.wind != "mock"
-        else "MOCK"
-    )
-    elev_status = (
-        "UNAVAILABLE"
-        if choice.elevation == "unavailable"
-        else "REAL"
-        if choice.elevation != "mock"
-        else "MOCK"
-    )
-    return [
+    infra_name = getattr(choice, "infrastructure", "unavailable")
+    trail = [
         f"Coordinate received: {latitude:.5f}, {longitude:.5f}",
-        f"Wind provider queried: {_provider_label(choice.wind)} [{wind_status}]",
-        f"Elevation provider queried: {_provider_label(choice.elevation)} [{elev_status}]",
+        f"Wind provider queried: {_provider_label(choice.wind)} [{_status_label(choice.wind)}]",
+        f"Elevation provider queried: {_provider_label(choice.elevation)} [{_status_label(choice.elevation)}]",
+        f"Infrastructure provider queried: {_provider_label(infra_name)} [{_status_label(infra_name)}]",
         f"Scores computed using formula v{SCORING_FORMULA_VERSION}",
         f"Report generated at {generated_at} (analysisId: {analysis_id})",
     ]
+    return trail
 
 
 def build_heatmap_methodology(

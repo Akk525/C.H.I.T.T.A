@@ -52,3 +52,5 @@ cell_analysis_cache: TTLCache[dict[str, object]] = TTLCache(ttl_s=3600.0, max_si
 wind_timeseries_cache: TTLCache[tuple[object, dict[str, object]]] = TTLCache(ttl_s=3600.0, max_size=256)
 elevation_point_cache: TTLCache[tuple[float, dict[str, object]]] = TTLCache(ttl_s=3600.0, max_size=256)
 elevation_samples_cache: TTLCache[tuple[list[object], dict[str, object]]] = TTLCache(ttl_s=3600.0, max_size=256)
+infrastructure_cache: TTLCache[tuple[object, dict[str, object]]] = TTLCache(ttl_s=7200.0, max_size=256)
+multi_height_wind_cache: TTLCache[tuple[object, dict[str, object]]] = TTLCache(ttl_s=3600.0, max_size=256)

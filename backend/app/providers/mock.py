@@ -45,6 +45,7 @@ class MockWindProvider(WindProvider):
             "speeds_mps": speeds,
             "directions_deg": None,
             "mean_speed_mps": float(sum(speeds) / len(speeds)),
+            "hub_height_m": 10,
         }
         return ts, {"source": "mock", "mean_speed_mps": ts["mean_speed_mps"], "count": len(speeds)}
 

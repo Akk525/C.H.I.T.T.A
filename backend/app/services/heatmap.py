@@ -4,7 +4,6 @@ import asyncio
 import math
 
 from app.providers.base import LatLng
-from app.providers.mock import MockAccessibilityProvider
 from app.services.analysis import analyze_site_realdata
 from app.services.cache import cell_analysis_cache, coord_cache_key
 from app.services.methodology import (
@@ -105,8 +104,8 @@ async def score_cell(
     if cached is not None:
         return dict(cached)
 
-    access_provider = MockAccessibilityProvider()
-    accessibility_score, _ = await access_provider.get_accessibility_score(p)
+    # Heatmap uses quick wind+terrain only (no OSM per cell — too slow for grids)
+    _NEUTRAL_ACCESSIBILITY = 50.0
 
     try:
         metrics_fragment, _sources_debug, choice = await analyze_site_realdata(p)
@@ -117,7 +116,7 @@ async def score_cell(
             "metrics": {
                 "windScore": None,
                 "terrainScore": None,
-                "accessibilityScore": round(accessibility_score, 1),
+                "accessibilityScore": _NEUTRAL_ACCESSIBILITY,
                 "confidenceScore": 15.0,
                 "totalSuitability": None,
             },
@@ -135,7 +134,7 @@ async def score_cell(
     total = total_suitability_optional(
         wind_score=wind_score,
         terrain_score=terrain_score,
-        accessibility_score=accessibility_score,
+        accessibility_score=_NEUTRAL_ACCESSIBILITY,
         confidence_score=confidence_score,
     )
 
@@ -147,7 +146,7 @@ async def score_cell(
         "metrics": {
             "windScore": _round_or_none(wind_score),
             "terrainScore": _round_or_none(terrain_score),
-            "accessibilityScore": round(accessibility_score, 1),
+            "accessibilityScore": _NEUTRAL_ACCESSIBILITY,
             "confidenceScore": round(confidence_score, 1),
             "totalSuitability": _round_or_none(total),
         },

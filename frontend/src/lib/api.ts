@@ -1,4 +1,6 @@
 import type {
+  ProspectingRequest,
+  ProspectingResponse,
   SiteAnalysisRequest,
   SiteAnalysisResponse,
   SiteHeatmapRequest,
@@ -81,4 +83,26 @@ export async function exportSiteReport(
   }
 
   return await res.blob();
+}
+
+export async function runProspecting(
+  req: ProspectingRequest,
+  signal?: AbortSignal,
+): Promise<ProspectingResponse> {
+  const url = `${getApiBaseUrl()}/api/prospecting/run`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Prospecting request failed (${res.status}): ${text || res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as ProspectingResponse;
 }

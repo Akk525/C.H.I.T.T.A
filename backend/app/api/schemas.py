@@ -9,18 +9,40 @@ class SiteAnalysisRequest(BaseModel):
 
 
 class SiteAnalysisMetrics(BaseModel):
+    # Core
     windScore: float | None = None
     terrainScore: float | None = None
-    accessibilityScore: float
     confidenceScore: float
+    # Elevation / terrain detail
     elevationM: float | None = None
     terrainComplexity: float | None = None
+    slopePct: float | None = None
+    ridgeScore: float | None = None
+    # Wind hub-height
+    windSpeedAtHub: float | None = None       # mean speed at highest available height (50m or 10m)
+    # Infrastructure (OSM)
+    infrastructureScore: float | None = None
+    nearestRoadM: float | None = None
+    nearestPowerlineM: float | None = None
+    settlementCount15km: int | None = None
+    # Environmental
+    environmentalScore: float | None = None
+    landCoverClass: str | None = None         # "forest"|"cropland"|"barren"|"urban"|...
+    landCoverScore: float | None = None
+    protectedAreaRisk: str | None = None      # "low"|"medium"|"high"
+    protectedAreaScore: float | None = None
+    inProtectedArea: bool | None = None
+    # Population proxy
+    populationScore: float | None = None
+    # Legacy field kept for backward compat with heatmap / frontend
+    accessibilityScore: float = 50.0
 
 
 class MethodologyMetadata(BaseModel):
     windDataSource: str
     windDateRange: str
     elevationSource: str
+    infrastructureSource: str = "Unavailable"
     scoringFormulaVersion: str
     terrainRoughnessMethod: str
     confidenceCalculationMethod: str
@@ -37,6 +59,61 @@ class ConsultantReport(BaseModel):
     dataSources: list[str]
 
 
+class EconomicAssumptionsSchema(BaseModel):
+    turbineRatingMw: float
+    turbineCount: int
+    electricityPriceUsdPerMwh: float
+    capexUsdPerMw: float
+    opexPctOfCapex: float
+    projectLifeYears: int
+    discountRate: float
+
+
+class EconomicMetricsSchema(BaseModel):
+    capacityFactor: float
+    annualEnergyMwh: float
+    capexUsd: float
+    opexUsdPerYear: float
+    annualRevenueUsd: float
+    paybackYears: float | None = None
+    lcoeUsdPerMwh: float
+    economicScore: float
+    windAvailable: bool
+    assumptions: EconomicAssumptionsSchema
+    limitations: list[str]
+
+
+class AgentEvidence(BaseModel):
+    label: str
+    value: str
+    source: str
+
+
+class AgentOutput(BaseModel):
+    agentName: str
+    status: str  # "complete" | "partial" | "fallback"
+    confidence: float
+    summary: str
+    findings: list[str]
+    risks: list[str]
+    recommendations: list[str]
+    evidence: list[AgentEvidence]
+
+
+class CoordinatorOutput(BaseModel):
+    finalDecision: str  # "promising" | "mixed" | "caution" | "poor"
+    topStrengths: list[str]
+    topRisks: list[str]
+    nextSteps: list[str]
+    confidenceSummary: str
+    contradictionNotes: list[str]
+
+
+class AgentAnalysis(BaseModel):
+    agents: list[AgentOutput]
+    coordinator: CoordinatorOutput
+
+
 class SiteAnalysisResponse(BaseModel):
     analysisId: str
     methodology: MethodologyMetadata
@@ -45,6 +122,8 @@ class SiteAnalysisResponse(BaseModel):
     metrics: SiteAnalysisMetrics
     totalSuitabilityScore: float | None = None
     report: ConsultantReport
+    agentAnalysis: AgentAnalysis | None = None
+    economicMetrics: EconomicMetricsSchema | None = None
     debug: dict[str, object] | None = None
 
 
@@ -53,6 +132,64 @@ class SiteHeatmapRequest(BaseModel):
     longitude: float = Field(..., ge=-180, le=180)
     radiusKm: float = Field(default=10.0, gt=0, le=50)
     gridSize: int = Field(default=5, ge=1, le=9)
+
+
+class ProspectingRequest(BaseModel):
+    regionName: str = "Custom Region"
+    centerLatitude: float = Field(..., ge=-90, le=90)
+    centerLongitude: float = Field(..., ge=-180, le=180)
+    radiusKm: float = Field(default=75.0, gt=0, le=200)
+    gridSize: int = Field(default=5, ge=2, le=10)
+    maxCandidates: int = Field(default=25, ge=4, le=50)
+
+
+class ProspectingCandidateSchema(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+    totalSuitability: float | None = None
+    finalDecision: str | None = None
+    windScore: float | None = None
+    terrainScore: float | None = None
+    infrastructureScore: float | None = None
+    environmentalScore: float | None = None
+    populationScore: float | None = None
+    confidenceScore: float
+    topStrengths: list[str]
+    topRisks: list[str]
+    isFullyEnriched: bool
+    providerStatus: dict[str, str]
+    # Economic fields (populated for fully-enriched candidates)
+    economicScore: float | None = None
+    lcoeUsdPerMwh: float | None = None
+    annualEnergyMwh: float | None = None
+    paybackYears: float | None = None
+    capacityFactor: float | None = None
+    error: str | None = None
+
+
+class ProspectingClusterSchema(BaseModel):
+    id: str
+    label: str
+    centroidLatitude: float
+    centroidLongitude: float
+    averageSuitability: float
+    candidateCount: int
+    topDecision: str
+    summary: str
+
+
+class ProspectingResponse(BaseModel):
+    prospectingId: str
+    region: dict[str, object]
+    generatedAt: str
+    candidateCount: int
+    enrichedCount: int
+    candidates: list[ProspectingCandidateSchema]
+    clusters: list[ProspectingClusterSchema]
+    topCandidates: list[ProspectingCandidateSchema]
+    methodology: dict[str, str]
+    auditTrail: list[str]
 
 
 class HeatmapCellMetrics(BaseModel):

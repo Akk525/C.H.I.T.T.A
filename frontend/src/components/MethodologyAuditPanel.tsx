@@ -94,6 +94,11 @@ export function MethodologyAuditPanel({
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs">
               Elevation: {methodology.elevationSource}
             </span>
+            {methodology.infrastructureSource ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs">
+                Infra: {methodology.infrastructureSource}
+              </span>
+            ) : null}
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs">
               v{methodology.scoringFormulaVersion}
             </span>
