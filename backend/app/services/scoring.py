@@ -191,6 +191,41 @@ def apply_economic_nudge(base_total: float | None, economic_score: float | None)
     return clamp100(base_total + eco_nudge)
 
 
+def total_suitability_weighted(
+    wind_score: float | None,
+    terrain_score: float | None,
+    infra_score: float | None,
+    env_score: float | None,
+    pop_score: float | None,
+    confidence_score: float,
+    economic_score: float | None,
+    weights: dict[str, float],
+) -> float | None:
+    """
+    Simulation formula: 7-dimension weighted suitability with fully configurable weights.
+    Weights must be pre-normalised (sum to 1.0). Economic is a proper weight, not a nudge.
+    """
+    if wind_score is None and terrain_score is None:
+        return None
+
+    ws = wind_score if wind_score is not None else 0.0
+    ts = terrain_score if terrain_score is not None else 0.0
+    is_ = infra_score if infra_score is not None else 50.0
+    es = env_score if env_score is not None else 55.0
+    ps = pop_score if pop_score is not None else 60.0
+    eco = economic_score if economic_score is not None else 50.0
+
+    return clamp100(
+        weights.get("wind", 0.0) * ws
+        + weights.get("terrain", 0.0) * ts
+        + weights.get("infrastructure", 0.0) * is_
+        + weights.get("environmental", 0.0) * es
+        + weights.get("population", 0.0) * ps
+        + weights.get("confidence", 0.0) * confidence_score
+        + weights.get("economic", 0.0) * eco
+    )
+
+
 def compute_scores_from_enriched(
     metrics: dict[str, Any],
     enriched: "EnrichedData",

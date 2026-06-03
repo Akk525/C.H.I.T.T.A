@@ -1,11 +1,16 @@
 import type {
+  ProspectingReportExportRequest,
   ProspectingRequest,
   ProspectingResponse,
+  SimulationRequest,
+  SimulationResponse,
   SiteAnalysisRequest,
   SiteAnalysisResponse,
   SiteHeatmapRequest,
   SiteHeatmapResponse,
   SiteReportExportRequest,
+  SynthesisRequest,
+  SynthesisResponse,
 } from "@/lib/types";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
@@ -105,4 +110,70 @@ export async function runProspecting(
   }
 
   return (await res.json()) as ProspectingResponse;
+}
+
+export async function exportProspectingReport(
+  req: ProspectingReportExportRequest,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const url = `${getApiBaseUrl()}/api/prospecting-report/export`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Prospecting report export failed (${res.status}): ${text || res.statusText}`,
+    );
+  }
+
+  return await res.blob();
+}
+
+export async function runAISynthesis(
+  req: SynthesisRequest,
+  signal?: AbortSignal,
+): Promise<SynthesisResponse> {
+  const url = `${getApiBaseUrl()}/api/ai/synthesize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `AI synthesis request failed (${res.status}): ${text || res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as SynthesisResponse;
+}
+
+export async function runSimulation(
+  req: SimulationRequest,
+  signal?: AbortSignal,
+): Promise<SimulationResponse> {
+  const url = `${getApiBaseUrl()}/api/simulation/run`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Simulation request failed (${res.status}): ${text || res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as SimulationResponse;
 }

@@ -235,3 +235,144 @@ export type ProspectingResponse = {
   methodology: Record<string, string>;
   auditTrail: string[];
 };
+
+// ── Simulation ─────────────────────────────────────────────────────────────────
+
+export type SimulationConfig = {
+  turbineCount: number;
+  turbineRatingMw: number;
+  electricityPriceUsdPerMwh: number;
+  capexUsdPerMw: number;
+  opexPercentOfCapex: number;
+  projectLifeYears: number;
+  windWeight: number;
+  terrainWeight: number;
+  infrastructureWeight: number;
+  environmentalWeight: number;
+  populationWeight: number;
+  confidenceWeight: number;
+  economicWeight: number;
+  environmentalStrictness: "low" | "medium" | "high";
+  infrastructurePreference: "remote" | "balanced" | "grid-connected";
+};
+
+export const DEFAULT_SIMULATION_CONFIG: SimulationConfig = {
+  turbineCount: 10,
+  turbineRatingMw: 3.0,
+  electricityPriceUsdPerMwh: 55.0,
+  capexUsdPerMw: 1_300_000,
+  opexPercentOfCapex: 0.03,
+  projectLifeYears: 20,
+  windWeight: 35,
+  terrainWeight: 20,
+  infrastructureWeight: 15,
+  environmentalWeight: 10,
+  populationWeight: 10,
+  confidenceWeight: 5,
+  economicWeight: 5,
+  environmentalStrictness: "medium",
+  infrastructurePreference: "balanced",
+};
+
+export type SimulatedCandidate = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  originalTotalSuitability: number | null;
+  newTotalSuitability: number | null;
+  suitabilityDelta: number | null;
+  originalDecision: string | null;
+  newDecision: string | null;
+  newEconomicScore: number | null;
+  newLcoeUsdPerMwh: number | null;
+  newAnnualEnergyMwh: number | null;
+  newPaybackYears: number | null;
+  newCapacityFactor: number | null;
+  topStrengths: string[];
+  topRisks: string[];
+};
+
+export type CandidateRankingChange = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  originalRank: number;
+  newRank: number;
+  rankChange: number;
+  direction: "up" | "down" | "unchanged";
+};
+
+export type SimulationRequest = {
+  candidates: ProspectingCandidate[];
+  config: SimulationConfig;
+};
+
+export type SimulationResponse = {
+  simulationId: string;
+  config: SimulationConfig;
+  recomputedCandidates: SimulatedCandidate[];
+  rankingChanges: CandidateRankingChange[];
+  strongestCandidate: SimulatedCandidate | null;
+  weakestCandidate: SimulatedCandidate | null;
+  mostImprovedCandidate: SimulatedCandidate | null;
+  mostSensitiveCandidate: SimulatedCandidate | null;
+  methodology: Record<string, string>;
+  auditTrail: string[];
+};
+
+// ── AI Synthesis ───────────────────────────────────────────────────────────────
+
+export type SynthesisMode = "site" | "prospecting" | "simulation";
+
+export type SynthesisRequest = {
+  mode: SynthesisMode;
+  siteAnalysis?: SiteAnalysisResponse | null;
+  prospecting?: ProspectingResponse | null;
+  simulation?: SimulationResponse | null;
+};
+
+export type SynthesisCitation = {
+  claim: string;
+  evidenceIds: string[];
+};
+
+export type SynthesisNarrative = {
+  executiveSummary: string;
+  strategicAssessment: string;
+  strongestSignals: string[];
+  majorRisks: string[];
+  economicNarrative: string;
+  infrastructureNarrative: string;
+  environmentalNarrative: string;
+  recommendations: string[];
+  warnings: string[];
+  citations: SynthesisCitation[];
+  generatedFromEvidenceIds: string[];
+};
+
+export type EvidencePacket = {
+  evidenceId: string;
+  category: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  source: string;
+  quality: string;
+};
+
+export type SynthesisResponse = {
+  synthesisId: string;
+  mode: SynthesisMode;
+  provider: string;
+  model: string;
+  narrative: SynthesisNarrative;
+  evidencePackets: EvidencePacket[];
+  validationWarnings: string[];
+  generatedAt: string;
+};
+
+export type ProspectingReportExportRequest = {
+  prospecting: ProspectingResponse;
+  simulation?: SimulationResponse | null;
+  synthesis?: SynthesisResponse | null;
+};

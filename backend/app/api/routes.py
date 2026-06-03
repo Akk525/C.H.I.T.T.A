@@ -20,6 +20,7 @@ from app.api.schemas import (
     AgentAnalysis,
     AgentEvidence,
     AgentOutput,
+    CandidateRankingChange,
     CoordinatorOutput,
     EconomicAssumptionsSchema,
     EconomicMetricsSchema,
@@ -27,17 +28,30 @@ from app.api.schemas import (
     ProspectingClusterSchema,
     ProspectingRequest,
     ProspectingResponse,
+    SimulatedCandidateSchema,
+    SimulationRequest,
+    SimulationResponse,
     SiteAnalysisRequest,
     SiteAnalysisResponse,
     SiteHeatmapRequest,
     SiteHeatmapResponse,
     SiteReportExportRequest,
+    ProspectingReportExportRequest,
+    SynthesisRequest,
+    SynthesisResponse,
 )
 from app.providers.base import LatLng
 from app.services.analysis import analyze_site_enriched
 from app.services.heatmap import build_heatmap
 from app.services.economics import EconomicAssumptions, compute_economic_metrics
 from app.services.prospecting import ProspectingCandidate, run_prospecting
+from app.services.simulation import (
+    CandidateInput,
+    CandidateRankingChange as _SvcRankingChange,
+    SimulatedCandidate as _SvcSimCandidate,
+    SimulationConfig,
+    run_simulation,
+)
 from app.services.scoring import apply_economic_nudge
 from app.services.methodology import (
     build_methodology,
@@ -46,6 +60,7 @@ from app.services.methodology import (
     utc_now_iso,
 )
 from app.services.pdf_export import generate_site_report_pdf
+from app.services.prospecting_pdf import generate_prospecting_report_pdf
 from app.services.report import build_report
 from app.services.scoring import (
     environmental_score,
@@ -308,6 +323,22 @@ async def export_site_report(req: SiteReportExportRequest) -> Response:
     )
 
 
+@router.post("/api/prospecting-report/export")
+async def export_prospecting_report(req: ProspectingReportExportRequest) -> Response:
+    pdf_bytes = generate_prospecting_report_pdf(
+        req.prospecting,
+        req.simulation,
+        req.synthesis,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="chitta-prospecting-report.pdf"'
+        },
+    )
+
+
 def _candidate_to_schema(c: ProspectingCandidate) -> ProspectingCandidateSchema:
     return ProspectingCandidateSchema(
         id=c.id,
@@ -331,6 +362,139 @@ def _candidate_to_schema(c: ProspectingCandidate) -> ProspectingCandidateSchema:
         paybackYears=c.paybackYears,
         capacityFactor=c.capacityFactor,
         error=c.error,
+    )
+
+
+def _sim_candidate_to_schema(s: _SvcSimCandidate) -> SimulatedCandidateSchema:
+    return SimulatedCandidateSchema(
+        id=s.id,
+        latitude=s.latitude,
+        longitude=s.longitude,
+        originalTotalSuitability=s.originalTotalSuitability,
+        newTotalSuitability=s.newTotalSuitability,
+        suitabilityDelta=s.suitabilityDelta,
+        originalDecision=s.originalDecision,
+        newDecision=s.newDecision,
+        newEconomicScore=s.newEconomicScore,
+        newLcoeUsdPerMwh=s.newLcoeUsdPerMwh,
+        newAnnualEnergyMwh=s.newAnnualEnergyMwh,
+        newPaybackYears=s.newPaybackYears,
+        newCapacityFactor=s.newCapacityFactor,
+        topStrengths=s.topStrengths,
+        topRisks=s.topRisks,
+    )
+
+
+@router.post("/api/simulation/run", response_model=SimulationResponse)
+async def run_simulation_endpoint(request: SimulationRequest) -> SimulationResponse:
+    cfg_s = request.config
+    config = SimulationConfig(
+        turbineCount=cfg_s.turbineCount,
+        turbineRatingMw=cfg_s.turbineRatingMw,
+        electricityPriceUsdPerMwh=cfg_s.electricityPriceUsdPerMwh,
+        capexUsdPerMw=cfg_s.capexUsdPerMw,
+        opexPercentOfCapex=cfg_s.opexPercentOfCapex,
+        projectLifeYears=cfg_s.projectLifeYears,
+        windWeight=cfg_s.windWeight,
+        terrainWeight=cfg_s.terrainWeight,
+        infrastructureWeight=cfg_s.infrastructureWeight,
+        environmentalWeight=cfg_s.environmentalWeight,
+        populationWeight=cfg_s.populationWeight,
+        confidenceWeight=cfg_s.confidenceWeight,
+        economicWeight=cfg_s.economicWeight,
+        environmentalStrictness=cfg_s.environmentalStrictness,
+        infrastructurePreference=cfg_s.infrastructurePreference,
+    )
+    inputs = [
+        CandidateInput(
+            id=c.id,
+            latitude=c.latitude,
+            longitude=c.longitude,
+            totalSuitability=c.totalSuitability,
+            finalDecision=c.finalDecision,
+            windScore=c.windScore,
+            terrainScore=c.terrainScore,
+            infrastructureScore=c.infrastructureScore,
+            environmentalScore=c.environmentalScore,
+            populationScore=c.populationScore,
+            confidenceScore=c.confidenceScore,
+            capacityFactor=c.capacityFactor,
+            topStrengths=c.topStrengths,
+            topRisks=c.topRisks,
+        )
+        for c in request.candidates
+    ]
+    result = run_simulation(inputs, config)
+    return SimulationResponse(
+        simulationId=result.simulationId,
+        config=request.config,
+        recomputedCandidates=[_sim_candidate_to_schema(s) for s in result.recomputedCandidates],
+        rankingChanges=[
+            CandidateRankingChange(
+                id=rc.id,
+                latitude=rc.latitude,
+                longitude=rc.longitude,
+                originalRank=rc.originalRank,
+                newRank=rc.newRank,
+                rankChange=rc.rankChange,
+                direction=rc.direction,
+            )
+            for rc in result.rankingChanges
+        ],
+        strongestCandidate=(
+            _sim_candidate_to_schema(result.strongestCandidate)
+            if result.strongestCandidate else None
+        ),
+        weakestCandidate=(
+            _sim_candidate_to_schema(result.weakestCandidate)
+            if result.weakestCandidate else None
+        ),
+        mostImprovedCandidate=(
+            _sim_candidate_to_schema(result.mostImprovedCandidate)
+            if result.mostImprovedCandidate else None
+        ),
+        mostSensitiveCandidate=(
+            _sim_candidate_to_schema(result.mostSensitiveCandidate)
+            if result.mostSensitiveCandidate else None
+        ),
+        methodology=result.methodology,
+        auditTrail=result.auditTrail,
+    )
+
+
+@router.post("/api/ai/synthesize", response_model=SynthesisResponse)
+async def ai_synthesize(req: SynthesisRequest) -> SynthesisResponse:
+    from app.synthesis.service import synthesize
+    result = await synthesize(
+        mode=req.mode,
+        site_analysis=req.siteAnalysis,
+        prospecting=req.prospecting,
+        simulation=req.simulation,
+    )
+    narrative_raw = result["narrative"]
+    from app.api.schemas import CitationSchema, EvidencePacketSchema, SynthesisNarrative
+    narrative = SynthesisNarrative(
+        executiveSummary=narrative_raw["executiveSummary"],
+        strategicAssessment=narrative_raw["strategicAssessment"],
+        strongestSignals=narrative_raw["strongestSignals"],
+        majorRisks=narrative_raw["majorRisks"],
+        economicNarrative=narrative_raw["economicNarrative"],
+        infrastructureNarrative=narrative_raw["infrastructureNarrative"],
+        environmentalNarrative=narrative_raw["environmentalNarrative"],
+        recommendations=narrative_raw["recommendations"],
+        warnings=narrative_raw["warnings"],
+        citations=[CitationSchema(**c) for c in narrative_raw["citations"]],
+        generatedFromEvidenceIds=narrative_raw["generatedFromEvidenceIds"],
+    )
+    return SynthesisResponse(
+        synthesisId=result["synthesisId"],
+        mode=result["mode"],
+        provider=result["provider"],
+        model=result["model"],
+        narrative=narrative,
+        evidencePackets=[EvidencePacketSchema(**p) for p in result["evidencePackets"]],
+        validationWarnings=result["validationWarnings"],
+        generatedAt=result["generatedAt"],
     )
 
 

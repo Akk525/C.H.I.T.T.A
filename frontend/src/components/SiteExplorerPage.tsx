@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
+import { AIBriefingPanel } from "@/components/AIBriefingPanel";
 import { EconomicsPanel } from "@/components/EconomicsPanel";
 import { ConsultantReportView } from "@/components/ConsultantReport";
 import { LocationSearch } from "@/components/LocationSearch";
@@ -401,6 +402,15 @@ export default function SiteExplorerPage() {
           {analysis?.agentAnalysis ? (
             <div className="mt-1">
               <AgentAnalysisPanel agentAnalysis={analysis.agentAnalysis} />
+            </div>
+          ) : null}
+
+          {analysis ? (
+            <div className="mt-1">
+              <AIBriefingPanel
+                mode="site"
+                siteAnalysis={analysis}
+              />
             </div>
           ) : null}
 

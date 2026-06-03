@@ -229,3 +229,124 @@ class SiteHeatmapResponse(BaseModel):
 class SiteReportExportRequest(BaseModel):
     analysis: SiteAnalysisResponse
     heatmap: SiteHeatmapResponse | None = None
+
+
+# ── Simulation ─────────────────────────────────────────────────────────────────
+
+class SimulationConfigSchema(BaseModel):
+    turbineCount: int = 10
+    turbineRatingMw: float = 3.0
+    electricityPriceUsdPerMwh: float = 55.0
+    capexUsdPerMw: float = 1_300_000.0
+    opexPercentOfCapex: float = 0.03
+    projectLifeYears: int = 20
+    windWeight: float = 35.0
+    terrainWeight: float = 20.0
+    infrastructureWeight: float = 15.0
+    environmentalWeight: float = 10.0
+    populationWeight: float = 10.0
+    confidenceWeight: float = 5.0
+    economicWeight: float = 5.0
+    environmentalStrictness: str = "medium"
+    infrastructurePreference: str = "balanced"
+
+
+class SimulatedCandidateSchema(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+    originalTotalSuitability: float | None = None
+    newTotalSuitability: float | None = None
+    suitabilityDelta: float | None = None
+    originalDecision: str | None = None
+    newDecision: str | None = None
+    newEconomicScore: float | None = None
+    newLcoeUsdPerMwh: float | None = None
+    newAnnualEnergyMwh: float | None = None
+    newPaybackYears: float | None = None
+    newCapacityFactor: float | None = None
+    topStrengths: list[str] = Field(default_factory=list)
+    topRisks: list[str] = Field(default_factory=list)
+
+
+class CandidateRankingChange(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+    originalRank: int
+    newRank: int
+    rankChange: int   # positive = moved up
+    direction: str    # "up" | "down" | "unchanged"
+
+
+class SimulationRequest(BaseModel):
+    candidates: list[ProspectingCandidateSchema]
+    config: SimulationConfigSchema
+
+
+class SimulationResponse(BaseModel):
+    simulationId: str
+    config: SimulationConfigSchema
+    recomputedCandidates: list[SimulatedCandidateSchema]
+    rankingChanges: list[CandidateRankingChange]
+    strongestCandidate: SimulatedCandidateSchema | None = None
+    weakestCandidate: SimulatedCandidateSchema | None = None
+    mostImprovedCandidate: SimulatedCandidateSchema | None = None
+    mostSensitiveCandidate: SimulatedCandidateSchema | None = None
+    methodology: dict[str, str]
+    auditTrail: list[str]
+
+
+# ── AI Synthesis ────────────────────────────────────────────────────────────────
+
+class SynthesisRequest(BaseModel):
+    mode: str = Field(..., pattern="^(site|prospecting|simulation)$")
+    siteAnalysis: SiteAnalysisResponse | None = None
+    prospecting: ProspectingResponse | None = None
+    simulation: SimulationResponse | None = None
+
+
+class CitationSchema(BaseModel):
+    claim: str
+    evidenceIds: list[str]
+
+
+class SynthesisNarrative(BaseModel):
+    executiveSummary: str
+    strategicAssessment: str
+    strongestSignals: list[str]
+    majorRisks: list[str]
+    economicNarrative: str
+    infrastructureNarrative: str
+    environmentalNarrative: str
+    recommendations: list[str]
+    warnings: list[str]
+    citations: list[CitationSchema]
+    generatedFromEvidenceIds: list[str]
+
+
+class EvidencePacketSchema(BaseModel):
+    evidenceId: str
+    category: str
+    label: str
+    value: str
+    unit: str | None = None
+    source: str
+    quality: str
+
+
+class SynthesisResponse(BaseModel):
+    synthesisId: str
+    mode: str
+    provider: str
+    model: str
+    narrative: SynthesisNarrative
+    evidencePackets: list[EvidencePacketSchema]
+    validationWarnings: list[str]
+    generatedAt: str
+
+
+class ProspectingReportExportRequest(BaseModel):
+    prospecting: ProspectingResponse
+    simulation: SimulationResponse | None = None
+    synthesis: SynthesisResponse | None = None

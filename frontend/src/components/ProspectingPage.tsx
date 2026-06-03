@@ -2,11 +2,20 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { AIBriefingPanel } from "@/components/AIBriefingPanel";
 import { ProspectingCandidatePanel } from "@/components/ProspectingCandidatePanel";
 import { ProspectingClusterCard } from "@/components/ProspectingClusterCard";
 import { ProspectingMap } from "@/components/ProspectingMap";
-import { runProspecting } from "@/lib/api";
-import type { LatLng, ProspectingCandidate, ProspectingCluster, ProspectingResponse } from "@/lib/types";
+import { SimulationPanel } from "@/components/SimulationPanel";
+import { exportProspectingReport, runProspecting } from "@/lib/api";
+import type {
+  LatLng,
+  ProspectingCandidate,
+  ProspectingCluster,
+  ProspectingResponse,
+  SimulationResponse,
+  SynthesisResponse,
+} from "@/lib/types";
 
 // ── Sample regions ────────────────────────────────────────────────────────────
 const SAMPLE_REGIONS = [
@@ -76,7 +85,14 @@ export default function ProspectingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<ProspectingCandidate | null>(null);
+  const [simOpen, setSimOpen] = useState(false);
+  const [simResult, setSimResult] = useState<SimulationResponse | null>(null);
+  const [synthesisResult, setSynthesisResult] = useState<SynthesisResponse | null>(null);
+  const [aiBriefingMode, setAiBriefingMode] = useState<"site" | "prospecting" | "simulation" | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const exportAbortRef = useRef<AbortController | null>(null);
 
   const mapCenter: LatLng = { latitude: centerLat, longitude: centerLng };
   const candidateCount = gridSize * gridSize;
@@ -97,6 +113,10 @@ export default function ProspectingPage() {
     setLoading(true);
     setResult(null);
     setSelectedCandidate(null);
+    setSimResult(null);
+    setSynthesisResult(null);
+    setAiBriefingMode(null);
+    setExportError(null);
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
@@ -122,7 +142,6 @@ export default function ProspectingPage() {
   }
 
   function handleFocusCluster(cluster: ProspectingCluster) {
-    // Find the highest-scoring candidate in this cluster region
     if (!result) return;
     const nearest = result.candidates
       .filter((c) => c.totalSuitability !== null)
@@ -132,6 +151,38 @@ export default function ProspectingPage() {
         return da - db;
       })[0];
     if (nearest) setSelectedCandidate(nearest);
+  }
+
+  async function handleExportReport() {
+    if (!result) return;
+    setExportError(null);
+    setExportLoading(true);
+    exportAbortRef.current?.abort();
+    exportAbortRef.current = new AbortController();
+
+    try {
+      const blob = await exportProspectingReport(
+        {
+          prospecting: result,
+          simulation: simResult ?? null,
+          synthesis: synthesisResult ?? null,
+        },
+        exportAbortRef.current.signal,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "chitta-prospecting-report.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      if ((e as Error)?.name === "AbortError") return;
+      setExportError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExportLoading(false);
+    }
   }
 
   return (
@@ -273,7 +324,7 @@ export default function ProspectingPage() {
             )}
           </div>
 
-          {/* Methodology summary */}
+          {/* Methodology summary + export */}
           {result && (
             <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-2">
               <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">RUN SUMMARY</div>
@@ -285,6 +336,25 @@ export default function ProspectingPage() {
               </div>
               <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2">
                 {result.auditTrail.map((line, i) => <div key={i}>{line}</div>)}
+              </div>
+              <div className="border-t border-slate-100 pt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleExportReport}
+                  disabled={exportLoading || loading}
+                  className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {exportLoading ? "Exporting PDF…" : "Export Prospecting Report"}
+                </button>
+                {(simResult || synthesisResult) && (
+                  <div className="text-[10px] text-slate-400 space-y-0.5">
+                    {simResult && <div>Includes simulation findings</div>}
+                    {synthesisResult && <div>Includes AI synthesis</div>}
+                  </div>
+                )}
+                {exportError && (
+                  <div className="text-xs text-rose-700">{exportError}</div>
+                )}
               </div>
             </div>
           )}
@@ -383,6 +453,81 @@ export default function ProspectingPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Scenario Simulation */}
+          {result && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">
+                  SCENARIO SIMULATION
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSimOpen((v) => !v)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    simOpen
+                      ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {simOpen ? "Close Simulation" : "Simulate Scenarios"}
+                </button>
+              </div>
+              {simOpen && (
+                <SimulationPanel
+                  candidates={result.candidates}
+                  onClose={() => setSimOpen(false)}
+                  onResult={(res) => {
+                    setSimResult(res);
+                    setAiBriefingMode("simulation");
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* AI Briefing */}
+          {result && (
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">
+                  AI BRIEFING
+                </div>
+                {simResult && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setAiBriefingMode("prospecting")}
+                      className={`rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                        aiBriefingMode === "prospecting"
+                          ? "bg-blue-100 text-blue-800"
+                          : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Prospecting
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiBriefingMode("simulation")}
+                      className={`rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                        aiBriefingMode === "simulation"
+                          ? "bg-blue-100 text-blue-800"
+                          : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Simulation
+                    </button>
+                  </div>
+                )}
+              </div>
+              <AIBriefingPanel
+                mode={aiBriefingMode ?? "prospecting"}
+                prospecting={result}
+                simulation={simResult}
+                onResult={setSynthesisResult}
+              />
             </div>
           )}
 
