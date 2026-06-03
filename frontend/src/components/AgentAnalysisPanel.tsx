@@ -196,12 +196,12 @@ export function AgentAnalysisPanel({ agentAnalysis }: { agentAnalysis: AgentAnal
 
   return (
     <div className="space-y-3">
-      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-        AGENT ANALYSIS
-      </div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--chitta-accent)]">
+        Agent analysis
+      </p>
 
       {/* Coordinator summary */}
-      <div className={`chitta-card rounded-xl border ${cfg.border} ${cfg.bg} p-4`}>
+      <div className={`chitta-panel border ${cfg.border} ${cfg.bg} p-4`}>
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="text-sm font-semibold text-slate-900">Coordinator Assessment</div>
           <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${cfg.badge}`}>

@@ -8,33 +8,43 @@ export function ScoreCard({
   subtitle,
   tone = "neutral",
   icon,
+  loading = false,
 }: {
   title: string;
   value: string;
   subtitle?: string;
   tone?: "neutral" | "good" | "warn";
   icon?: ReactNode;
+  loading?: boolean;
 }) {
+  const accentBar =
+    tone === "good"
+      ? "border-t-[var(--chitta-accent)]"
+      : tone === "warn"
+        ? "border-t-amber-400"
+        : "border-t-transparent";
+
   const toneClasses =
     tone === "good"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      ? "bg-[var(--chitta-accent-soft)]/50 text-[var(--chitta-ink)]"
       : tone === "warn"
-        ? "border-amber-200 bg-amber-50 text-amber-900"
-        : "border-slate-200 bg-white text-slate-900";
+        ? "bg-amber-50 text-amber-950"
+        : "bg-[var(--chitta-surface)] text-[var(--chitta-ink)]";
 
   return (
     <div
-      className={`chitta-card rounded-xl p-4 shadow-sm ${toneClasses} flex flex-col gap-1`}
+      className={`rounded-xl border border-[var(--chitta-border)] border-t-2 p-3 ${accentBar} ${toneClasses} flex flex-col gap-0.5 ${loading ? "chitta-score-skeleton pointer-events-none" : ""}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium text-slate-700">{title}</div>
-        {icon ? <div className="text-slate-500">{icon}</div> : null}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--chitta-muted)]">
+          {title}
+        </div>
+        {icon ? <div className="text-[var(--chitta-muted)]">{icon}</div> : null}
       </div>
-      <div className="text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="chitta-mono text-xl font-bold tracking-tight">{value}</div>
       {subtitle ? (
-        <div className="text-xs text-slate-600">{subtitle}</div>
+        <div className="text-[10px] leading-snug text-[var(--chitta-muted)]">{subtitle}</div>
       ) : null}
     </div>
   );
 }
-

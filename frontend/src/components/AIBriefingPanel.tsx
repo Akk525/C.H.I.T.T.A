@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingProgress } from "@/components/LoadingProgress";
 import { useRef, useState } from "react";
 import { runAISynthesis } from "@/lib/api";
 import type {
@@ -279,21 +280,23 @@ export function AIBriefingPanel({
   }
 
   return (
-    <div className="chitta-card rounded-xl bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
+    <div className="chitta-panel overflow-hidden">
+      <div className="border-b border-[var(--chitta-border)] bg-[var(--chitta-bg)] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">AI BRIEFING</div>
-            <div className="text-sm font-medium text-slate-900">Grounded Synthesis</div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--chitta-accent)]">
+              AI Briefing
+            </p>
+            <div className="text-sm font-semibold text-[var(--chitta-ink)]">Grounded synthesis</div>
           </div>
           <button
             type="button"
             onClick={result ? () => setResult(null) : handleGenerate}
             disabled={loading}
-            className={`rounded-xl px-4 py-2 text-sm font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               result
-                ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                : "bg-blue-600 text-white hover:bg-blue-700"
+                ? "border border-[var(--chitta-border)] bg-[var(--chitta-surface)] text-[var(--chitta-muted)] hover:bg-[var(--chitta-bg)]"
+                : "bg-[var(--chitta-accent)] text-white hover:bg-[var(--chitta-accent-hover)]"
             }`}
           >
             {loading ? "Generating briefing…" : result ? "Clear" : "Generate AI Briefing"}
@@ -313,12 +316,7 @@ export function AIBriefingPanel({
           </p>
         )}
 
-        {loading && (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
-            Synthesising from {mode} evidence…
-          </div>
-        )}
+        {loading && <LoadingProgress variant="ai-briefing" compact />}
 
         {result && <NarrativePanel result={result} />}
       </div>

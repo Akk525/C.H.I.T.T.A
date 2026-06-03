@@ -5,6 +5,7 @@ import os
 from openai import AsyncOpenAI
 
 from .base import LLMProvider
+from .json_utils import parse_json_object
 
 
 class OpenAIProvider(LLMProvider):
@@ -26,7 +27,7 @@ class OpenAIProvider(LLMProvider):
                 {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
             ],
             temperature=0.2,
-            max_tokens=2500,
+            max_tokens=8192,
         )
         raw = response.choices[0].message.content or "{}"
-        return json.loads(raw)
+        return parse_json_object(raw)

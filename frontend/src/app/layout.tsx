@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CHITTA — AI-Assisted Wind Site Screening",
   description:
-    "AI-assisted wind site screening for terrain-aware renewable energy planning. Real wind & elevation data, heatmaps, PDF export, and audit trail.",
+    "Screen wind sites in minutes with live NASA POWER and elevation data, multi-agent scoring, heatmaps, and audit-ready PDF reports.",
 };
 
 export default function RootLayout({

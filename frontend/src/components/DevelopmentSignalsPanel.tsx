@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingProgress } from "@/components/LoadingProgress";
 import { useRef, useState } from "react";
 import { queryDevelopmentSignals } from "@/lib/api";
 import type { DevelopmentSignal, GroupedInsight, SignalsQueryResponse } from "@/lib/types";
@@ -244,6 +245,8 @@ export function DevelopmentSignalsPanel({ regionName, latitude, longitude, radiu
             grid expansion, policy announcements, and environmental factors.
             Results are <strong>advisory only</strong> and not verified facts.
           </div>
+
+          {loading && <LoadingProgress variant="signals" compact />}
 
           {error && (
             <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</div>

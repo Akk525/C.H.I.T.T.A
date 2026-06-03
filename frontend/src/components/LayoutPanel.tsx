@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingProgress } from "@/components/LoadingProgress";
 import { useRef, useState } from "react";
 import { runLayoutAnalysis } from "@/lib/api";
 import type { LayoutAnalysisResponse, TurbinePosition } from "@/lib/types";
@@ -173,6 +174,8 @@ export function LayoutPanel({ latitude, longitude, onLayoutResult }: Props) {
               </button>
             )}
           </div>
+
+          {loading && <LoadingProgress variant="layout" compact />}
 
           {error && (
             <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</div>

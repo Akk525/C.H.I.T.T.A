@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingProgress } from "@/components/LoadingProgress";
 import { useState } from "react";
 import { runSimulation } from "@/lib/api";
 import {
@@ -487,8 +488,8 @@ export function SimulationPanel({ candidates, onClose, onResult }: Props) {
           )}
 
           {loading && (
-            <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-blue-600">
-              Computing scenario…
+            <div className="min-h-[200px] py-4">
+              <LoadingProgress variant="simulation" />
             </div>
           )}
 

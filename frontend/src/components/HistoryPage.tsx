@@ -1,7 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AppShell } from "@/components/ui/AppShell";
+import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { fetchHistoryCompare, fetchHistoryRuns } from "@/lib/api";
 import type { HistorySummaryResponse, SavedRunSummary } from "@/lib/types";
 
@@ -163,8 +165,12 @@ function RunItem({
 }) {
   return (
     <div
-      className={`rounded-lg border p-3 cursor-pointer transition-colors ${
-        selected ? "border-indigo-300 bg-indigo-50" : compareSelected ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-white hover:bg-slate-50"
+      className={`chitta-lift chitta-panel cursor-pointer p-3 transition-colors ${
+        selected
+          ? "ring-2 ring-indigo-300"
+          : compareSelected
+            ? "ring-2 ring-[var(--chitta-sky)]"
+            : ""
       }`}
       onClick={onSelect}
     >
@@ -256,29 +262,16 @@ export default function HistoryPage() {
   const compareRun = runs.find((r) => r.id === compareId);
 
   return (
-    <div className="flex min-h-full flex-col bg-gradient-to-b from-slate-50 via-white to-white">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white/70 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <Link href="/" className="text-xs text-slate-500 hover:text-emerald-700">← Home</Link>
-              <Link href="/demo" className="text-xs text-slate-500 hover:text-emerald-700">Site Analysis</Link>
-              <Link href="/prospecting" className="text-xs text-slate-500 hover:text-emerald-700">Prospecting</Link>
-              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-800">
-                History
-              </span>
-            </div>
-            <div className="text-xs font-semibold tracking-[0.18em] text-emerald-700">CHITTA</div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-950">Run History</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {total} saved run{total !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-7xl px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <AppShell
+      header={
+        <PageHeader
+          eyebrow="Saved analyses"
+          title="Run History"
+          subtitle={`${total} saved run${total !== 1 ? "s" : ""} — compare site and prospecting runs with LangGraph.`}
+        />
+      }
+    >
+      <main className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-12">
         {/* Sidebar: filter + list */}
         <aside className="lg:col-span-4 space-y-3">
           {/* Type filter */}
@@ -309,14 +302,14 @@ export default function HistoryPage() {
 
           {/* Compare action */}
           {selectedId && compareId && (
-            <button
+            <Button
               type="button"
               onClick={handleCompare}
               disabled={compareLoading}
-              className="w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
+              className="w-full !bg-indigo-600 hover:!bg-indigo-700"
             >
               {compareLoading ? "Comparing…" : "Run LangGraph Comparison"}
-            </button>
+            </Button>
           )}
 
           {selectedId && !compareId && (
@@ -359,16 +352,20 @@ export default function HistoryPage() {
           )}
 
           {comparison && (
-            <div className="chitta-card rounded-xl bg-white p-4 shadow-sm">
-              <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-slate-500">COMPARISON RESULT</div>
+            <div className="chitta-panel p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--chitta-muted)]">
+                Comparison result
+              </p>
               <ComparisonPanel summary={comparison} />
             </div>
           )}
 
           {/* Selected run detail */}
           {selectedRun && !comparison && (
-            <div className="chitta-card rounded-xl bg-white p-4 shadow-sm">
-              <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-slate-500">SELECTED RUN</div>
+            <div className="chitta-panel p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--chitta-muted)]">
+                Selected run
+              </p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Type</span>
@@ -433,6 +430,6 @@ export default function HistoryPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

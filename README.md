@@ -92,7 +92,7 @@ WS10M/50M/100M     SRTM 90m           Overpass API
 |---|---|
 | Frontend | Next.js 16, Tailwind CSS, Mapbox GL JS |
 | Backend | FastAPI, Pydantic v2, ReportLab, httpx |
-| LLM | OpenAI SDK (mock provider default) |
+| LLM | Anthropic Claude / Google Gemini / OpenAI (mock default) |
 | Orchestration | LangGraph (history comparison graph) |
 | Signals | GDELT DOC API v2 (mock fallback) |
 | Persistence | PostgreSQL + SQLAlchemy + Alembic |
@@ -151,9 +151,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | `DATABASE_URL` | postgres://… | No | PostgreSQL DSN. Only needed for history. |
 | `PERSIST_ANALYSES` | `false` | No | Set `true` to enable run persistence. |
 | `CORS_ORIGINS` | `http://localhost:3000` | Yes | Comma-separated allowed origins. |
-| `CHITTA_LLM_PROVIDER` | `mock` | No | `mock` or `openai`. Mock needs no key. |
-| `OPENAI_API_KEY` | — | No | Required only if LLM_PROVIDER=openai. |
-| `CHITTA_SYNTHESIS_MODEL` | `gpt-4.1-mini` | No | OpenAI model name. |
+| `CHITTA_LLM_PROVIDER` | `mock` | No | `mock`, `claude`, `gemini`, or `openai`. Mock needs no key. |
+| `ANTHROPIC_API_KEY` | — | No | Required when `CHITTA_LLM_PROVIDER=claude`. |
+| `GOOGLE_API_KEY` | — | No | Required when `CHITTA_LLM_PROVIDER=gemini` (`GEMINI_API_KEY` also accepted). |
+| `OPENAI_API_KEY` | — | No | Required when `CHITTA_LLM_PROVIDER=openai`. |
+| `CHITTA_SYNTHESIS_MODEL` | (provider default) | No | e.g. `claude-sonnet-4-20250514`, `gemini-2.5-flash`, `gpt-4.1-mini`. |
 | `CHITTA_SIGNALS_PROVIDER` | `mock` | No | `mock` or `gdelt`. GDELT is free, rate-limited. |
 
 ### Frontend (`frontend/.env.local`)
@@ -183,7 +185,7 @@ Open [http://localhost:3000](http://localhost:3000).
 1. **Not engineering-grade** — economic estimates (LCOE, CAPEX, payback) are ±30–50% order-of-magnitude. Not bankable.
 2. **Jensen wake model** — simplified top-hat single-direction model. Real wake CFD would give substantially different results.
 3. **GDELT signals are advisory** — news titles are classified by keyword, not verified. Treat as directional intelligence only.
-4. **AI synthesis is grounded but LLM-dependent** — the mock provider gives deterministic narratives; OpenAI provider requires an API key and costs money.
+4. **AI synthesis is grounded but LLM-dependent** — the mock provider gives deterministic narratives; Claude, Gemini, or OpenAI require an API key and may incur usage costs.
 5. **History requires PostgreSQL** — all other features work without a database.
 6. **GDELT rate limit** — 1 request per 5 seconds. Hitting the limit falls back to mock signals automatically.
 7. **NASA POWER / OpenTopoData** — public APIs that may rate-limit or fail. Mock fallbacks apply; always labeled REAL vs MOCK.

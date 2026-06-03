@@ -1,8 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
+import { LoadingProgress } from "@/components/LoadingProgress";
+import { AppShell } from "@/components/ui/AppShell";
+import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { DevelopmentSignalsPanel } from "@/components/DevelopmentSignalsPanel";
 import { ProspectingCandidatePanel } from "@/components/ProspectingCandidatePanel";
 import { ProspectingClusterCard } from "@/components/ProspectingClusterCard";
@@ -207,35 +211,20 @@ export default function ProspectingPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-gradient-to-b from-emerald-50 via-white to-white">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white/70 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <Link href="/" className="text-xs text-slate-500 hover:text-emerald-700">← Home</Link>
-              <Link href="/demo" className="text-xs text-slate-500 hover:text-emerald-700">Site Analysis</Link>
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800">
-                Prospecting
-              </span>
-              <Link href="/history" className="text-xs text-slate-500 hover:text-emerald-700">History</Link>
-            </div>
-            <div className="text-xs font-semibold tracking-[0.18em] text-emerald-700">CHITTA</div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-950">
-              Regional Wind Prospecting
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Screen candidate sites across a region and surface high-potential wind corridors.
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-7xl px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <AppShell
+      header={
+        <PageHeader
+          eyebrow="Regional screening"
+          title="Wind Prospecting"
+          subtitle="Screen candidate sites across a region and surface high-potential wind corridors."
+        />
+      }
+    >
+      <main className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-12">
         {/* Config panel */}
         <aside className="lg:col-span-3 space-y-4">
-          <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-3">
-            <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">REGION PRESETS</div>
+          <div className="chitta-panel space-y-3 p-4">
+            <SectionLabel>Region presets</SectionLabel>
             <div className="space-y-2">
               {SAMPLE_REGIONS.map((r) => (
                 <button
@@ -244,8 +233,8 @@ export default function ProspectingPage() {
                   onClick={() => applyPreset(r)}
                   className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                     regionName === r.label
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                      : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                      ? "border-[var(--chitta-accent)] bg-[var(--chitta-accent-soft)] text-[var(--chitta-ink)]"
+                      : "border-[var(--chitta-border)] text-[var(--chitta-ink)] hover:bg-[var(--chitta-bg)]"
                   }`}
                 >
                   <div className="font-medium">{r.label}</div>
@@ -255,8 +244,8 @@ export default function ProspectingPage() {
             </div>
           </div>
 
-          <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-4">
-            <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">CONFIGURATION</div>
+          <div className="chitta-panel space-y-4 p-4">
+            <SectionLabel>Configuration</SectionLabel>
 
             <div>
               <label className="text-xs text-slate-600 block mb-1">Region name</label>
@@ -319,8 +308,8 @@ export default function ProspectingPage() {
                     onClick={() => setGridSize(g)}
                     className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${
                       gridSize === g
-                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                        ? "border-[var(--chitta-accent)] bg-[var(--chitta-accent-soft)] text-[var(--chitta-accent)]"
+                        : "border-[var(--chitta-border)] text-[var(--chitta-muted)] hover:bg-[var(--chitta-bg)]"
                     }`}
                   >
                     {g}×{g}
@@ -330,16 +319,16 @@ export default function ProspectingPage() {
               <div className="mt-1 text-[10px] text-slate-400">{candidateCount} candidate points</div>
             </div>
 
-            <button
+            <Button
               type="button"
               onClick={handleRun}
               disabled={loading}
-              className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full"
             >
               {loading
                 ? `Screening ${candidateCount} sites…`
                 : "Run Prospecting"}
-            </button>
+            </Button>
 
             {error && (
               <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</div>
@@ -348,8 +337,8 @@ export default function ProspectingPage() {
 
           {/* Methodology summary + export */}
           {result && (
-            <div className="chitta-card rounded-xl bg-white p-4 shadow-sm space-y-2">
-              <div className="text-xs font-semibold tracking-[0.12em] text-slate-500">RUN SUMMARY</div>
+            <div className="chitta-panel space-y-2 p-4">
+              <SectionLabel>Run summary</SectionLabel>
               <div className="text-xs text-slate-600 space-y-1">
                 <div><span className="font-medium">{result.candidateCount}</span> candidates screened</div>
                 <div><span className="font-medium">{result.enrichedCount}</span> fully enriched</div>
@@ -584,17 +573,17 @@ export default function ProspectingPage() {
           )}
 
           {loading && (
-            <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 p-8 text-center">
-              <div className="text-sm font-medium text-emerald-800">
-                Screening {candidateCount} candidate sites across {regionName}…
-              </div>
-              <div className="mt-1 text-xs text-emerald-600">
-                Pass 1: wind + terrain · Pass 2: full enriched analysis for top sites
-              </div>
-            </div>
+            <LoadingProgress
+              variant="prospecting"
+              detail={`Screening ${candidateCount} sites · ${regionName} · ${gridSize}×${gridSize} grid`}
+            />
+          )}
+
+          {exportLoading && (
+            <LoadingProgress variant="export-pdf" compact />
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

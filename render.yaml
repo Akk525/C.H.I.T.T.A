@@ -16,8 +16,8 @@ services:
       - key: PERSIST_ANALYSES
         value: "false"       # set to true only if DATABASE_URL is configured
       - key: CHITTA_LLM_PROVIDER
-        value: mock          # set to openai and add OPENAI_API_KEY for live synthesis
+        value: mock          # claude | gemini | openai — add matching API key in dashboard
       - key: CHITTA_SIGNALS_PROVIDER
         value: gdelt         # gdelt is free; set to mock if rate limiting is an issue
       - key: CHITTA_SYNTHESIS_MODEL
-        value: gpt-4.1-mini
+        sync: false          # optional override per provider
