@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
+import { DevelopmentSignalsPanel } from "@/components/DevelopmentSignalsPanel";
 import { LayoutPanel } from "@/components/LayoutPanel";
 import { EconomicsPanel } from "@/components/EconomicsPanel";
 import { ConsultantReportView } from "@/components/ConsultantReport";
@@ -14,7 +15,7 @@ import { MethodologyAuditPanel } from "@/components/MethodologyAuditPanel";
 import { SampleSiteButtons } from "@/components/SampleSiteButtons";
 import { ScoreCard } from "@/components/ScoreCard";
 import { TopCandidateZones } from "@/components/TopCandidateZones";
-import { exportSiteReport, fetchSiteAnalysis, fetchSiteHeatmap } from "@/lib/api";
+import { exportSiteReport, fetchSiteAnalysis, fetchSiteHeatmap, saveToHistory } from "@/lib/api";
 import { DEMO_SITES, getDemoSite, type DemoSite } from "@/lib/demoSites";
 import type { HeatmapCell, LatLng, SiteAnalysisResponse, SiteHeatmapResponse, TurbinePosition } from "@/lib/types";
 
@@ -81,6 +82,9 @@ export default function SiteExplorerPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const exportAbortRef = useRef<AbortController | null>(null);
 
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+
   const [turbinePositions, setTurbinePositions] = useState<TurbinePosition[] | null>(null);
 
   const applySampleSite = useCallback((site: DemoSite) => {
@@ -134,6 +138,24 @@ export default function SiteExplorerPage() {
   const metrics = analysis?.metrics;
   const total = analysis?.totalSuitabilityScore ?? null;
   const sources = (analysis?.debug as { sources?: DebugSources } | undefined)?.sources;
+
+  async function handleSaveToHistory() {
+    if (!analysis) return;
+    setSaveLoading(true);
+    setSaveStatus("idle");
+    try {
+      await saveToHistory({
+        runType: "site",
+        label: `${pickedLabel} · ${selected.latitude.toFixed(4)}, ${selected.longitude.toFixed(4)}`,
+        payload: analysis as unknown as Record<string, unknown>,
+      });
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    } finally {
+      setSaveLoading(false);
+    }
+  }
 
   async function handleExportReport() {
     if (!analysis) return;
@@ -197,6 +219,7 @@ export default function SiteExplorerPage() {
             <div className="flex items-center gap-2">
               <Link href="/" className="text-xs text-slate-500 hover:text-emerald-700">← Home</Link>
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Demo</span>
+              <Link href="/history" className="text-xs text-slate-500 hover:text-emerald-700">History</Link>
             </div>
             <div className="mt-1 text-xs font-semibold tracking-[0.18em] text-emerald-700">
               CHITTA
@@ -380,17 +403,30 @@ export default function SiteExplorerPage() {
 
           {analysis ? (
             <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleExportReport}
-                disabled={exportLoading || loading}
-                className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {exportLoading ? "Exporting PDF…" : "Export Site Assessment"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportReport}
+                  disabled={exportLoading || loading}
+                  className="flex-1 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {exportLoading ? "Exporting PDF…" : "Export Site Assessment"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToHistory}
+                  disabled={saveLoading}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {saveLoading ? "Saving…" : saveStatus === "saved" ? "✓ Saved" : "Save to History"}
+                </button>
+              </div>
               {exportError ? (
                 <div className="text-xs text-rose-700">{exportError}</div>
               ) : null}
+              {saveStatus === "error" && (
+                <div className="text-xs text-rose-700">Save failed — is the database running?</div>
+              )}
             </div>
           ) : null}
 
@@ -417,6 +453,17 @@ export default function SiteExplorerPage() {
                 latitude={selected.latitude}
                 longitude={selected.longitude}
                 onLayoutResult={(positions) => setTurbinePositions(positions)}
+              />
+            </div>
+          ) : null}
+
+          {analysis ? (
+            <div className="mt-1">
+              <DevelopmentSignalsPanel
+                regionName={pickedLabel}
+                latitude={selected.latitude}
+                longitude={selected.longitude}
+                radiusKm={50}
               />
             </div>
           ) : null}

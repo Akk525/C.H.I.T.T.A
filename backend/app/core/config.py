@@ -10,8 +10,12 @@ class Settings(BaseModel):
 
 
 def get_settings() -> Settings:
-    # Minimal MVP config; later swap to pydantic-settings if desired.
     import os
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    env_file = Path(__file__).parent.parent.parent / ".env"
+    load_dotenv(env_file, override=False)
 
     cors = os.getenv("CORS_ORIGINS", "http://localhost:3000")
     return Settings(

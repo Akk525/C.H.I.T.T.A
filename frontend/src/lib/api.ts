@@ -1,7 +1,15 @@
 import type {
+  HistoryListResponse,
+  SignalsQueryRequest,
+  SignalsQueryResponse,
+  HistorySummarizeRequest,
+  HistorySummaryResponse,
   LayoutAnalysisRequest,
   LayoutAnalysisResponse,
   ProspectingReportExportRequest,
+  SavedRunDetail,
+  SaveRunRequest,
+  SaveRunResponse,
   ProspectingRequest,
   ProspectingResponse,
   SimulationRequest,
@@ -21,6 +29,13 @@ function getApiBaseUrl() {
   return process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
 }
 
+// Returns {"X-Api-Key": "<key>"} when NEXT_PUBLIC_CHITTA_API_KEY is set, else {}.
+// This is demo-level shared key protection — not per-user auth.
+function getAuthHeaders(): Record<string, string> {
+  const key = process.env.NEXT_PUBLIC_CHITTA_API_KEY?.trim();
+  return key ? { "X-Api-Key": key } : {};
+}
+
 export async function fetchSiteAnalysis(
   req: SiteAnalysisRequest,
   signal?: AbortSignal,
@@ -28,7 +43,7 @@ export async function fetchSiteAnalysis(
   const url = `${getApiBaseUrl()}/api/site-analysis`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -50,7 +65,7 @@ export async function fetchSiteHeatmap(
   const url = `${getApiBaseUrl()}/api/site-heatmap`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
       latitude: req.latitude,
       longitude: req.longitude,
@@ -77,7 +92,7 @@ export async function exportSiteReport(
   const url = `${getApiBaseUrl()}/api/site-report/export`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -99,7 +114,7 @@ export async function runProspecting(
   const url = `${getApiBaseUrl()}/api/prospecting/run`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -114,6 +129,104 @@ export async function runProspecting(
   return (await res.json()) as ProspectingResponse;
 }
 
+export async function queryDevelopmentSignals(
+  req: SignalsQueryRequest,
+  signal?: AbortSignal,
+): Promise<SignalsQueryResponse> {
+  const url = `${getApiBaseUrl()}/api/signals/query`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Signals query failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as SignalsQueryResponse;
+}
+
+export async function saveToHistory(
+  req: SaveRunRequest,
+  signal?: AbortSignal,
+): Promise<SaveRunResponse> {
+  const url = `${getApiBaseUrl()}/api/history/save`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Save failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as SaveRunResponse;
+}
+
+export async function fetchHistoryRuns(
+  runType?: string,
+  limit = 20,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<HistoryListResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (runType) params.set("runType", runType);
+  const url = `${getApiBaseUrl()}/api/history/runs?${params}`;
+  const res = await fetch(url, { headers: getAuthHeaders(), signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`History fetch failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as HistoryListResponse;
+}
+
+export async function fetchHistoryRun(
+  id: string,
+  signal?: AbortSignal,
+): Promise<SavedRunDetail> {
+  const url = `${getApiBaseUrl()}/api/history/run/${id}`;
+  const res = await fetch(url, { headers: getAuthHeaders(), signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Run fetch failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as SavedRunDetail;
+}
+
+export async function fetchHistoryCompare(
+  idA: string,
+  idB: string,
+  signal?: AbortSignal,
+): Promise<HistorySummaryResponse> {
+  const url = `${getApiBaseUrl()}/api/history/compare/${idA}/${idB}`;
+  const res = await fetch(url, { headers: getAuthHeaders(), signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Comparison failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as HistorySummaryResponse;
+}
+
+export async function runHistorySummarize(
+  req: HistorySummarizeRequest,
+  signal?: AbortSignal,
+): Promise<HistorySummaryResponse> {
+  const url = `${getApiBaseUrl()}/api/history/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Summarize failed (${res.status}): ${text || res.statusText}`);
+  }
+  return (await res.json()) as HistorySummaryResponse;
+}
+
 export async function runLayoutAnalysis(
   req: LayoutAnalysisRequest,
   signal?: AbortSignal,
@@ -121,7 +234,7 @@ export async function runLayoutAnalysis(
   const url = `${getApiBaseUrl()}/api/layout/analyze`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -143,7 +256,7 @@ export async function exportProspectingReport(
   const url = `${getApiBaseUrl()}/api/prospecting-report/export`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -165,7 +278,7 @@ export async function runAISynthesis(
   const url = `${getApiBaseUrl()}/api/ai/synthesize`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -187,7 +300,7 @@ export async function runSimulation(
   const url = `${getApiBaseUrl()}/api/simulation/run`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
     signal,
   });

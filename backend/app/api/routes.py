@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.agents import (
@@ -38,11 +38,23 @@ from app.api.schemas import (
     SiteReportExportRequest,
     LayoutAnalysisRequest,
     LayoutAnalysisResponse,
+    DevelopmentSignal,
+    GroupedInsight,
+    HistoryListResponse,
+    HistorySummarizeRequest,
+    HistorySummaryResponse,
+    SignalsQueryRequest,
+    SignalsQueryResponse,
     ProspectingReportExportRequest,
+    SavedRunDetail,
+    SavedRunSummary,
+    SaveRunRequest,
+    SaveRunResponse,
     SynthesisRequest,
     SynthesisResponse,
     TurbinePositionSchema,
 )
+from app.security import require_api_key
 from app.providers.base import LatLng
 from app.services.analysis import analyze_site_enriched
 from app.services.heatmap import build_heatmap
@@ -62,6 +74,7 @@ from app.services.methodology import (
     generate_analysis_id,
     utc_now_iso,
 )
+from app.db.deps import get_db
 from app.services.pdf_export import generate_site_report_pdf
 from app.services.prospecting_pdf import generate_prospecting_report_pdf
 from app.services.report import build_report
@@ -117,7 +130,7 @@ def _to_pydantic_agent(out: _AgentOutput) -> AgentOutput:
     )
 
 
-@router.post("/api/site-analysis", response_model=SiteAnalysisResponse)
+@router.post("/api/site-analysis", response_model=SiteAnalysisResponse, dependencies=[Depends(require_api_key)])
 async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     p = LatLng(latitude=req.latitude, longitude=req.longitude)
 
@@ -303,7 +316,7 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     )
 
 
-@router.post("/api/site-heatmap", response_model=SiteHeatmapResponse)
+@router.post("/api/site-heatmap", response_model=SiteHeatmapResponse, dependencies=[Depends(require_api_key)])
 async def site_heatmap(req: SiteHeatmapRequest) -> SiteHeatmapResponse:
     center = LatLng(latitude=req.latitude, longitude=req.longitude)
     result = await build_heatmap(
@@ -314,7 +327,7 @@ async def site_heatmap(req: SiteHeatmapRequest) -> SiteHeatmapResponse:
     return SiteHeatmapResponse(**result)  # type: ignore[arg-type]
 
 
-@router.post("/api/site-report/export")
+@router.post("/api/site-report/export", dependencies=[Depends(require_api_key)])
 async def export_site_report(req: SiteReportExportRequest) -> Response:
     pdf_bytes = generate_site_report_pdf(req.analysis, req.heatmap)
     return Response(
@@ -326,7 +339,7 @@ async def export_site_report(req: SiteReportExportRequest) -> Response:
     )
 
 
-@router.post("/api/prospecting-report/export")
+@router.post("/api/prospecting-report/export", dependencies=[Depends(require_api_key)])
 async def export_prospecting_report(req: ProspectingReportExportRequest) -> Response:
     pdf_bytes = generate_prospecting_report_pdf(
         req.prospecting,
@@ -388,7 +401,7 @@ def _sim_candidate_to_schema(s: _SvcSimCandidate) -> SimulatedCandidateSchema:
     )
 
 
-@router.post("/api/simulation/run", response_model=SimulationResponse)
+@router.post("/api/simulation/run", response_model=SimulationResponse, dependencies=[Depends(require_api_key)])
 async def run_simulation_endpoint(request: SimulationRequest) -> SimulationResponse:
     cfg_s = request.config
     config = SimulationConfig(
@@ -465,7 +478,7 @@ async def run_simulation_endpoint(request: SimulationRequest) -> SimulationRespo
     )
 
 
-@router.post("/api/layout/analyze", response_model=LayoutAnalysisResponse)
+@router.post("/api/layout/analyze", response_model=LayoutAnalysisResponse, dependencies=[Depends(require_api_key)])
 async def analyze_layout(req: LayoutAnalysisRequest) -> LayoutAnalysisResponse:
     from app.services.layout import LayoutAssumptions, generate_candidate_layout
 
@@ -506,7 +519,7 @@ async def analyze_layout(req: LayoutAnalysisRequest) -> LayoutAnalysisResponse:
     )
 
 
-@router.post("/api/ai/synthesize", response_model=SynthesisResponse)
+@router.post("/api/ai/synthesize", response_model=SynthesisResponse, dependencies=[Depends(require_api_key)])
 async def ai_synthesize(req: SynthesisRequest) -> SynthesisResponse:
     from app.synthesis.service import synthesize
     result = await synthesize(
@@ -542,7 +555,7 @@ async def ai_synthesize(req: SynthesisRequest) -> SynthesisResponse:
     )
 
 
-@router.post("/api/prospecting/run", response_model=ProspectingResponse)
+@router.post("/api/prospecting/run", response_model=ProspectingResponse, dependencies=[Depends(require_api_key)])
 async def run_prospecting_endpoint(req: ProspectingRequest) -> ProspectingResponse:
     center = LatLng(latitude=req.centerLatitude, longitude=req.centerLongitude)
     result = await run_prospecting(
@@ -572,3 +585,295 @@ async def run_prospecting_endpoint(req: ProspectingRequest) -> ProspectingRespon
         methodology=result.methodology,  # type: ignore[arg-type]
         auditTrail=result.auditTrail,
     )
+
+
+# ── Signals route ─────────────────────────────────────────────────────────────
+
+@router.get("/api/health/providers")
+async def health_providers() -> dict:
+    """Check connectivity to all external providers and infrastructure."""
+    import os
+    from datetime import datetime, timezone
+    results: dict[str, str] = {}
+
+    # Database
+    try:
+        if os.environ.get("PERSIST_ANALYSES", "false").lower() in {"1", "true", "yes", "on"}:
+            from sqlalchemy import text as sa_text
+            from app.db.session import SessionLocal
+            db = SessionLocal()
+            db.execute(sa_text("SELECT 1"))
+            db.close()
+            results["database"] = "ok"
+        else:
+            results["database"] = "disabled"
+    except Exception as exc:
+        results["database"] = f"unavailable ({exc!s})"
+
+    # NASA POWER
+    import httpx
+    _to = 6.0
+    for key, url in [
+        ("nasaPower", "https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=WS10M&community=RE&longitude=0&latitude=0&format=JSON"),
+        ("openTopoData", "https://api.opentopodata.org/v1/srtm90m?locations=0,0"),
+        ("osmOverpass", "https://overpass-api.de/api/status"),
+    ]:
+        try:
+            async with httpx.AsyncClient(timeout=_to) as client:
+                r = await client.get(url)
+            results[key] = "ok" if r.status_code < 500 else f"error ({r.status_code})"
+        except Exception:
+            results[key] = "unavailable"
+
+    # GDELT / signals
+    gdelt_prov = os.environ.get("CHITTA_SIGNALS_PROVIDER", "mock").lower()
+    if gdelt_prov == "mock":
+        results["gdelt"] = "ok (mock)"
+    else:
+        try:
+            gdelt_url = (
+                "https://api.gdeltproject.org/api/v2/doc/doc"
+                "?query=test&mode=artlist&maxrecords=1&format=json&timespan=1d"
+            )
+            async with httpx.AsyncClient(timeout=_to) as client:
+                r = await client.get(gdelt_url)
+            if r.status_code == 429:
+                results["gdelt"] = "rate_limited"
+            elif r.status_code < 400:
+                results["gdelt"] = "ok"
+            else:
+                results["gdelt"] = f"error ({r.status_code})"
+        except Exception:
+            results["gdelt"] = "unavailable"
+
+    # LLM provider
+    llm_prov = os.environ.get("CHITTA_LLM_PROVIDER", "mock").lower()
+    results["llmProvider"] = f"ok ({llm_prov})"
+
+    return {
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "providers": results,
+    }
+
+
+@router.post("/api/signals/query", response_model=SignalsQueryResponse, dependencies=[Depends(require_api_key)])
+async def query_signals(req: SignalsQueryRequest) -> SignalsQueryResponse:
+    from app.signals.signals_service import run_signals_query
+    result = await run_signals_query(
+        region_name=req.regionName,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        radius_km=req.radiusKm,
+    )
+    return SignalsQueryResponse(
+        queryId=result["queryId"],
+        regionName=result["regionName"],
+        provider=result["provider"],
+        signals=[DevelopmentSignal(**s) for s in result["signals"]],
+        groupedInsights=[GroupedInsight(**g) for g in result["groupedInsights"]],
+        agentSummary=result["agentSummary"],
+        warnings=result["warnings"],
+        generatedAt=result["generatedAt"],
+    )
+
+
+# ── History routes ─────────────────────────────────────────────────────────────
+
+def _extract_meta(run_type: str, payload: dict) -> dict:
+    """Denormalize key scalar fields from payload for efficient querying."""
+    if run_type == "site":
+        inputs = payload.get("inputs") or {}
+        ag = (payload.get("agentAnalysis") or {}).get("coordinator") or {}
+        meth = payload.get("methodology") or {}
+        return {
+            "latitude": inputs.get("latitude"),
+            "longitude": inputs.get("longitude"),
+            "total_suitability_score": payload.get("totalSuitabilityScore"),
+            "final_decision": ag.get("finalDecision"),
+            "formula_version": meth.get("scoringFormulaVersion"),
+        }
+    if run_type == "prospecting":
+        region = payload.get("region") or {}
+        return {
+            "region_name": region.get("name"),
+            "latitude": region.get("centerLatitude"),
+            "longitude": region.get("centerLongitude"),
+        }
+    return {}
+
+
+def _row_to_summary(row: "object") -> SavedRunSummary:
+    from app.models.saved_run import SavedRun as _SR
+    r: _SR = row  # type: ignore[assignment]
+    return SavedRunSummary(
+        id=str(r.id),
+        runType=r.run_type,
+        label=r.label,
+        latitude=r.latitude,
+        longitude=r.longitude,
+        regionName=r.region_name,
+        totalSuitabilityScore=r.total_suitability_score,
+        finalDecision=r.final_decision,
+        formulaVersion=r.formula_version,
+        createdAt=r.created_at.isoformat(),
+        tags=list(r.tags or []),
+    )
+
+
+@router.post("/api/history/save", response_model=SaveRunResponse, dependencies=[Depends(require_api_key)])
+async def save_run(req: SaveRunRequest, db=Depends(get_db)) -> SaveRunResponse:
+    from app.models.saved_run import SavedRun
+
+    meta = _extract_meta(req.runType, dict(req.payload))
+    row = SavedRun(
+        run_type=req.runType,
+        label=req.label,
+        payload=dict(req.payload),
+        **{k: v for k, v in meta.items() if v is not None},
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return SaveRunResponse(
+        id=str(row.id),
+        runType=row.run_type,
+        label=row.label,
+        createdAt=row.created_at.isoformat(),
+    )
+
+
+@router.get("/api/history/runs", response_model=HistoryListResponse, dependencies=[Depends(require_api_key)])
+async def list_runs(
+    runType: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db=Depends(get_db),
+) -> HistoryListResponse:
+    from sqlalchemy import select, func as sa_func
+    from app.models.saved_run import SavedRun
+
+    q = select(SavedRun)
+    if runType:
+        q = q.where(SavedRun.run_type == runType)
+    q = q.order_by(SavedRun.created_at.desc())
+
+    total = db.scalar(select(sa_func.count()).select_from(q.subquery()))
+    rows = db.scalars(q.offset(offset).limit(limit)).all()
+
+    return HistoryListResponse(
+        runs=[_row_to_summary(r) for r in rows],
+        total=total or 0,
+    )
+
+
+@router.get("/api/history/run/{run_id}", response_model=SavedRunDetail, dependencies=[Depends(require_api_key)])
+async def get_run(run_id: str, db=Depends(get_db)) -> SavedRunDetail:
+    import uuid as _uuid
+    from app.models.saved_run import SavedRun
+
+    try:
+        uid = _uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid run ID format")
+
+    row = db.get(SavedRun, uid)
+    if not row:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    summary = _row_to_summary(row)
+    return SavedRunDetail(**summary.model_dump(), payload=dict(row.payload))
+
+
+async def _run_history_graph(
+    current_row: "object",
+    previous_row: "object | None",
+) -> HistorySummaryResponse:
+    from app.langgraph.graph import history_graph
+    from app.models.saved_run import SavedRun as _SR
+
+    def _meta(r: _SR) -> dict:
+        return {
+            "id": str(r.id),
+            "run_type": r.run_type,
+            "label": r.label,
+            "created_at": r.created_at.isoformat(),
+            "total_suitability_score": r.total_suitability_score,
+            "final_decision": r.final_decision,
+        }
+
+    cur: _SR = current_row  # type: ignore[assignment]
+    initial_state = {
+        "current_run": dict(cur.payload),
+        "current_run_meta": _meta(cur),
+        "previous_run": dict(previous_row.payload) if previous_row else None,  # type: ignore[union-attr]
+        "previous_run_meta": _meta(previous_row) if previous_row else None,  # type: ignore[arg-type]
+        "run_type": cur.run_type,
+        "deltas": {},
+        "historical_narrative": "",
+        "evidence": [],
+        "warnings": [],
+        "summary_id": "",
+        "generated_at": "",
+    }
+
+    result = await history_graph.ainvoke(initial_state)
+
+    return HistorySummaryResponse(
+        summaryId=result["summary_id"],
+        runType=result["run_type"],
+        currentRunId=str(cur.id),
+        previousRunId=str(previous_row.id) if previous_row else None,  # type: ignore[union-attr]
+        deltas=result["deltas"],
+        historicalNarrative=result["historical_narrative"],
+        evidence=result["evidence"],
+        warnings=result["warnings"],
+        generatedAt=result["generated_at"],
+    )
+
+
+@router.get("/api/history/compare/{id_a}/{id_b}", response_model=HistorySummaryResponse, dependencies=[Depends(require_api_key)])
+async def compare_runs(id_a: str, id_b: str, db=Depends(get_db)) -> HistorySummaryResponse:
+    import uuid as _uuid
+    from app.models.saved_run import SavedRun
+
+    try:
+        uid_a, uid_b = _uuid.UUID(id_a), _uuid.UUID(id_b)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid run ID format")
+
+    row_a = db.get(SavedRun, uid_a)
+    row_b = db.get(SavedRun, uid_b)
+
+    if not row_a or not row_b:
+        raise HTTPException(status_code=404, detail="One or both runs not found")
+    if row_a.run_type != row_b.run_type:
+        raise HTTPException(status_code=422, detail="Runs must be of the same type to compare")
+
+    return await _run_history_graph(row_a, row_b)
+
+
+@router.post("/api/history/summarize", response_model=HistorySummaryResponse, dependencies=[Depends(require_api_key)])
+async def summarize_run(req: HistorySummarizeRequest, db=Depends(get_db)) -> HistorySummaryResponse:
+    import uuid as _uuid
+    from app.models.saved_run import SavedRun
+
+    try:
+        uid = _uuid.UUID(req.runId)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid run ID format")
+
+    row = db.get(SavedRun, uid)
+    if not row:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    prev_row = None
+    if req.compareToId:
+        try:
+            prev_uid = _uuid.UUID(req.compareToId)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid compareToId format")
+        prev_row = db.get(SavedRun, prev_uid)
+        if not prev_row:
+            raise HTTPException(status_code=404, detail="Comparison run not found")
+
+    return await _run_history_graph(row, prev_row)

@@ -371,6 +371,101 @@ export type SynthesisResponse = {
   generatedAt: string;
 };
 
+// ── Development Signals ───────────────────────────────────────────────────────
+
+export type SignalsQueryRequest = {
+  regionName: string;
+  latitude: number;
+  longitude: number;
+  radiusKm?: number;
+};
+
+export type DevelopmentSignal = {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  sentiment: "positive" | "negative" | "mixed" | "neutral";
+  source: string;
+  url: string | null;
+  publishedAt: string;
+  relevanceScore: number;
+};
+
+export type GroupedInsight = {
+  category: string;
+  categoryLabel: string;
+  signalCount: number;
+  sentiment: string;
+  keyTheme: string;
+};
+
+export type SignalsQueryResponse = {
+  queryId: string;
+  regionName: string;
+  provider: string;
+  signals: DevelopmentSignal[];
+  groupedInsights: GroupedInsight[];
+  agentSummary: string;
+  warnings: string[];
+  generatedAt: string;
+};
+
+// ── History ────────────────────────────────────────────────────────────────────
+
+export type SaveRunRequest = {
+  runType: "site" | "prospecting" | "simulation" | "synthesis" | "layout";
+  label?: string | null;
+  payload: Record<string, unknown>;
+};
+
+export type SaveRunResponse = {
+  id: string;
+  runType: string;
+  label: string | null;
+  createdAt: string;
+};
+
+export type SavedRunSummary = {
+  id: string;
+  runType: string;
+  label: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  regionName: string | null;
+  totalSuitabilityScore: number | null;
+  finalDecision: string | null;
+  formulaVersion: string | null;
+  createdAt: string;
+  tags: string[];
+};
+
+export type SavedRunDetail = SavedRunSummary & {
+  payload: Record<string, unknown>;
+};
+
+export type HistoryListResponse = {
+  runs: SavedRunSummary[];
+  total: number;
+};
+
+export type HistorySummarizeRequest = {
+  runId: string;
+  compareToId?: string | null;
+};
+
+export type HistorySummaryResponse = {
+  summaryId: string;
+  runType: string;
+  currentRunId: string;
+  previousRunId: string | null;
+  deltas: Record<string, unknown>;
+  historicalNarrative: string;
+  evidence: Record<string, unknown>[];
+  warnings: string[];
+  generatedAt: string;
+};
+
 export type ProspectingReportExportRequest = {
   prospecting: ProspectingResponse;
   simulation?: SimulationResponse | null;

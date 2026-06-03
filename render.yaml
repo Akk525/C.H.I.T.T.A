@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: chitta-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: CHITTA_API_KEY
+        sync: false          # generate: python3 -c "import secrets; print(secrets.token_hex(32))"
+                             # set the same value as NEXT_PUBLIC_CHITTA_API_KEY in Vercel dashboard
+      - key: DATABASE_URL
+        sync: false          # set manually in Render dashboard
+      - key: CORS_ORIGINS
+        value: https://chitta.vercel.app
+      - key: PERSIST_ANALYSES
+        value: "false"       # set to true only if DATABASE_URL is configured
+      - key: CHITTA_LLM_PROVIDER
+        value: mock          # set to openai and add OPENAI_API_KEY for live synthesis
+      - key: CHITTA_SIGNALS_PROVIDER
+        value: gdelt         # gdelt is free; set to mock if rate limiting is an issue
+      - key: CHITTA_SYNTHESIS_MODEL
+        value: gpt-4.1-mini

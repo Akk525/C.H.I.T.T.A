@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+import os
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SiteAnalysisRequest(BaseModel):
@@ -379,4 +382,114 @@ class LayoutAnalysisResponse(BaseModel):
     warnings: list[str]
     methodology: dict[str, str]
     auditTrail: list[str]
+    generatedAt: str
+
+
+# ── History ──────────────────────────────────────────────────────────────────────
+
+# ── Development Signals ────────────────────────────────────────────────────────────
+
+class SignalsQueryRequest(BaseModel):
+    regionName: str
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    radiusKm: float = Field(default=100.0, gt=0, le=500)
+
+
+class DevelopmentSignal(BaseModel):
+    id: str
+    title: str
+    category: str
+    summary: str
+    sentiment: str
+    source: str
+    url: str | None = None
+    publishedAt: str
+    relevanceScore: float
+
+
+class GroupedInsight(BaseModel):
+    category: str
+    categoryLabel: str
+    signalCount: int
+    sentiment: str
+    keyTheme: str
+
+
+class SignalsQueryResponse(BaseModel):
+    queryId: str
+    regionName: str
+    provider: str
+    signals: list[DevelopmentSignal]
+    groupedInsights: list[GroupedInsight]
+    agentSummary: str
+    warnings: list[str]
+    generatedAt: str
+
+
+class SaveRunRequest(BaseModel):
+    runType: str = Field(..., pattern="^(site|prospecting|simulation|synthesis|layout)$")
+    label: str | None = Field(default=None, max_length=120)
+    payload: dict[str, object]
+
+    @field_validator("payload")
+    @classmethod
+    def _check_payload_size(cls, v: dict) -> dict:
+        max_bytes = int(os.environ.get("CHITTA_MAX_HISTORY_PAYLOAD_BYTES", "1048576"))
+        try:
+            serialized = json.dumps(v, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"payload is not JSON-serializable: {exc}") from exc
+        size = len(serialized)
+        if size > max_bytes:
+            raise ValueError(
+                f"payload is {size // 1024} KB; exceeds the {max_bytes // 1024} KB limit"
+            )
+        return v
+
+
+class SaveRunResponse(BaseModel):
+    id: str
+    runType: str
+    label: str | None
+    createdAt: str
+
+
+class SavedRunSummary(BaseModel):
+    id: str
+    runType: str
+    label: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    regionName: str | None = None
+    totalSuitabilityScore: float | None = None
+    finalDecision: str | None = None
+    formulaVersion: str | None = None
+    createdAt: str
+    tags: list[str]
+
+
+class SavedRunDetail(SavedRunSummary):
+    payload: dict[str, object]
+
+
+class HistoryListResponse(BaseModel):
+    runs: list[SavedRunSummary]
+    total: int
+
+
+class HistorySummarizeRequest(BaseModel):
+    runId: str
+    compareToId: str | None = None
+
+
+class HistorySummaryResponse(BaseModel):
+    summaryId: str
+    runType: str
+    currentRunId: str
+    previousRunId: str | None
+    deltas: dict[str, object]
+    historicalNarrative: str
+    evidence: list[dict[str, object]]
+    warnings: list[str]
     generatedAt: str

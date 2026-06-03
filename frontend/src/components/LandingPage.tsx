@@ -42,8 +42,9 @@ export function LandingPage() {
           <div className="text-xs font-semibold tracking-[0.2em] text-emerald-700">CHITTA</div>
           <nav className="hidden gap-6 text-sm text-slate-600 sm:flex">
             <a href="#problem" className="hover:text-emerald-700">Problem</a>
-            <a href="#workflow" className="hover:text-emerald-700">Workflow</a>
-            <a href="#methodology" className="hover:text-emerald-700">Methodology</a>
+            <a href="#demo-path" className="hover:text-emerald-700">Demo path</a>
+            <Link href="/prospecting" className="hover:text-emerald-700">Prospecting</Link>
+            <Link href="/history" className="hover:text-emerald-700">History</Link>
           </nav>
           <Link href="/demo" className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
             Launch Demo
@@ -107,6 +108,29 @@ export function LandingPage() {
         <Section id="disclaimer" title="Disclaimer">
           <div className="chitta-card rounded-xl bg-slate-50 p-5 text-sm leading-6 text-slate-600">CHITTA is a preliminary screening tool. It is not a bankable wind resource assessment, feasibility study, or engineering recommendation. Results should be validated with on-site measurement, detailed GIS analysis, permitting review, and professional due diligence before any investment or development decision.</div>
         </Section>
+
+        <section id="demo-path" className="border-y border-slate-200/80 bg-white py-12 sm:py-16 scroll-mt-20">
+          <div className="mx-auto max-w-5xl px-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Recommended demo path</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Seven steps from coordinates to investment insight</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">Run through this path to see the full CHITTA workflow — from raw coordinates to a PDF dossier with AI synthesis, wake-loss estimates, and historical comparison.</p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <WorkflowStep step="01" title="Pick a site" body="Open Site Analysis → click Karnataka Wind Corridor. CHITTA fetches NASA POWER wind and OpenTopoData elevation in real time." />
+              <WorkflowStep step="02" title="Run Prospecting" body="Open Prospecting → select Karnataka Wind Corridor preset → Run. Screens 25 candidate sites with full agent analysis for the top results." />
+              <WorkflowStep step="03" title="Simulate Economics" body="In the Prospecting results, open Scenario Simulation → adjust turbine count, tariff, and CAPEX → run. See which candidates improve under different assumptions." />
+              <WorkflowStep step="04" title="Generate Turbine Layout" body="Back in Site Analysis, open Layout Intelligence → Generate Layout. Amber turbine markers appear on the map with estimated wake loss and efficiency score." />
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <WorkflowStep step="05" title="Generate AI Briefing" body="Open AI Briefing on either page → Generate. A grounded consultant narrative is produced from deterministic evidence packets — every claim is cited." />
+              <WorkflowStep step="06" title="Export Prospecting Report" body="After Prospecting, click Export Prospecting Report. A multi-page PDF dossier downloads with cluster summaries, candidate rankings, economics, and audit trail." />
+              <WorkflowStep step="07" title="Save & Compare" body="Click Save to History on any analysis. Visit /history, select two saved site runs, click Run LangGraph Comparison — a narrative delta is generated via the 6-node LangGraph graph." />
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/demo" className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Start with Site Analysis</Link>
+              <Link href="/prospecting" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50">Go to Prospecting</Link>
+            </div>
+          </div>
+        </section>
 
         <section className="py-16">
           <div className="mx-auto max-w-5xl px-4 text-center">

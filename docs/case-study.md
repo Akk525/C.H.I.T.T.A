@@ -183,6 +183,74 @@ Landing page → `/demo?sample=kutch` loads the site and triggers analysis autom
 
 ---
 
+## Architecture evolution: Phases 4–9
+
+### Phase 4 — Economic Feasibility + Scenario Simulation
+
+The scoring layer gained a preliminary economic module computing CAPEX, LCOE, annual energy output, and simple payback from NASA POWER wind speed. A separate simulation engine (`sim-1.0`) allows re-running scoring across all prospecting candidates with configurable weights and economic assumptions — surfacing which sites are most sensitive to tariff, CAPEX, or infrastructure preference changes. The economic score was integrated as a soft nudge (±8pt) on the total suitability rather than a standalone dimension, preserving the integrity of the deterministic scoring model.
+
+**Key tradeoff:** Economic estimates at ±30–50% accuracy are explicitly labelled as order-of-magnitude. The system makes no attempt to produce bankable figures — it screens for economic viability in rank order, not absolute value.
+
+### Phase 5.5 — Grounded AI Synthesis Layer
+
+The AI synthesis layer adds LLM-generated consultant narratives with strict evidence grounding. All inputs to the LLM are structured as evidence packets with stable IDs (e.g., `wind:score`, `economic:lcoe`, `agent:coordinator`). The LLM is constrained to reference only the provided evidenceIds. Citation validation runs post-generation; any invented reference triggers automatic fallback to a deterministic mock provider.
+
+This design reflects a key architectural principle: **AI should not have arbitrary execution authority, and AI-generated text should be verifiably grounded in deterministic outputs.** The mock provider means the synthesis layer works fully offline without any API keys, making it safe to demo and develop against.
+
+The OpenAI provider (`gpt-4.1-mini` default) can be enabled optionally. The system supports three modes — site, prospecting, and simulation — each generating a structured narrative with `executiveSummary`, `strongestSignals`, `majorRisks`, `economicNarrative`, `infrastructureNarrative`, `environmentalNarrative`, `recommendations`, and `citations`.
+
+### Phase 6 — Prospecting Report PDF Export
+
+ReportLab PDF export was extended to prospecting runs. The prospecting dossier spans 14 sections including cover page, cluster summary table, 10-column candidate rankings, economic feasibility summary, AI strategic assessment, and simulation sensitivity findings. It reuses all helper functions and constants from the site assessment PDF (`_esc`, `_fmt_score`, `_bullet_list`, `_section_heading`, `ACCENT`, `MUTED`, `LIGHT_BG`), demonstrating the value of the shared layout abstraction.
+
+### Phase 7 — Wake Loss and Layout Intelligence
+
+A simplified wind turbine layout planner was added. It places turbines on a wind-aligned rectangular grid using flat-Earth coordinate conversion, then estimates inter-turbine wake losses using the Jensen 1983 top-hat wake model with Katic RSS superposition for multiple upstream wakes. Spacing violations (pairs closer than 3D minimum) are detected via Haversine pair-wise distance.
+
+**Key tradeoff:** The Jensen model with a single prevailing wind direction is explicitly labelled as preliminary screening. Real wake losses depend on wind rose distributions, atmospheric stability, terrain, and turbine control strategies. CFD or commercial wake modelling software (e.g., WAsP, OpenFOAM) would be required for engineering-grade estimates. CHITTA's output is correct in order-of-magnitude and useful for ranking candidate layouts, not for energy yield certification.
+
+### Phase 8A — Historical Memory and LangGraph Orchestration
+
+PostgreSQL persistence was activated (previously scaffolded but unused). A single `saved_runs` table stores the full response payload as JSONB plus denormalized scalar fields for efficient querying. The LangGraph history comparison graph has 6 nodes with conditional routing:
+
+```
+load_snapshot → compare_runs → ranking_delta → simulation_delta → narrative_delta → historical_summary
+              ↘                                                                     ↗
+                ────────────────────── (no previous run) ────────────────────────
+```
+
+The graph uses `ainvoke` (async) and produces a `HistorySummaryResponse` with computed deltas, an LLM-generated narrative about the changes, and citations. This demonstrates LangGraph's conditional routing capability without autonomous or recursive loops — the graph always terminates in a fixed number of steps.
+
+**Key tradeoff:** LangGraph was chosen despite the linear nature of the comparison workflow because it provides clean state management, conditional node routing, and a clear pattern for future expansion (e.g., adding a `field_validation_node` that queries external APIs). For a strictly linear workflow, a plain async function would have been simpler.
+
+### Phase 8B — GDELT Development Signals
+
+The signals layer queries the GDELT DOC API v2 (`api.gdeltproject.org/api/v2/doc/doc`) for news articles related to the prospecting region. Articles are classified by category (renewable/grid/infrastructure/environmental/policy/economic) and sentiment (positive/negative/mixed/neutral) using keyword matching on article titles — since GDELT returns metadata only, not full article body.
+
+The DevelopmentSignalsAgent is entirely deterministic: it counts signals by category and sentiment, then generates a 3-4 sentence regional momentum narrative. No LLM is used for the signals layer, keeping it free and offline-capable.
+
+**Key design constraint:** Signals are labelled "advisory only" throughout the UI and in the agent summary. News coverage does not equal ground truth — a project delay announcement may reflect local media interest rather than engineering reality.
+
+### Phase 9 — Productization
+
+Phase 9 added provider health monitoring (`GET /api/health/providers`), a React error boundary to prevent blank screens on component failures, a 7-step demo path on the landing page, a multi-stage backend Dockerfile, Render deployment config, complete `.env.example` files covering all variables introduced across Phases 1–8B, and updated documentation artifacts.
+
+---
+
+## Technical tradeoffs: summary
+
+| Decision | Rationale |
+|---|---|
+| Deterministic agents (no LLM in scoring) | Auditability, reproducibility, zero API cost |
+| Jensen wake model over CFD | Appropriate for screening; CFD is for EPC engineering |
+| Mock-first provider pattern | Safe demos without API keys; clear REAL/MOCK labelling |
+| Single JSONB payload in saved_runs | Schema flexibility across run types; avoids complex migrations |
+| LangGraph for comparison | Clean state management and routing; future expandability |
+| Evidence-grounded synthesis | Eliminates hallucination risk; every claim is cited |
+| PostgreSQL optional | History features off by default; no infrastructure required for basic demo |
+
+---
+
 ## Future roadmap
 
 - [ ] OSM Overpass for road and transmission proximity

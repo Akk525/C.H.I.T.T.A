@@ -1,14 +1,13 @@
 """init postgis models
 
 Revision ID: 0001_init
-Revises: 
+Revises:
 Create Date: 2026-06-02 19:40:52.607572
 
 """
 from typing import Sequence, Union
 
 from alembic import op
-from geoalchemy2 import Geometry
 import sqlalchemy as sa
 
 
@@ -20,17 +19,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    op.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
+    """Upgrade schema. PostGIS is optional — uses TEXT fallback if not installed."""
+    bind = op.get_bind()
 
-    op.create_table(
-        "sites",
+    # Use a SAVEPOINT so a PostGIS failure doesn't abort the whole transaction
+    has_postgis = False
+    bind.execute(sa.text("SAVEPOINT postgis_attempt"))
+    try:
+        bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        has_postgis = True
+        bind.execute(sa.text("RELEASE SAVEPOINT postgis_attempt"))
+    except Exception:
+        bind.execute(sa.text("ROLLBACK TO SAVEPOINT postgis_attempt"))
+        bind.execute(sa.text("RELEASE SAVEPOINT postgis_attempt"))
+
+    cols = [
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("latitude", sa.Float(), nullable=False),
         sa.Column("longitude", sa.Float(), nullable=False),
-        sa.Column("geom", Geometry("POINT", srid=4326), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-    )
+    ]
+    if has_postgis:
+        from geoalchemy2 import Geometry
+        cols.insert(3, sa.Column("geom", Geometry("POINT", srid=4326), nullable=False))
+    else:
+        cols.insert(3, sa.Column("geom", sa.Text(), nullable=True))
+
+    op.create_table("sites", *cols)
 
     op.create_table(
         "site_analyses",

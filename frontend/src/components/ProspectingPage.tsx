@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
+import { DevelopmentSignalsPanel } from "@/components/DevelopmentSignalsPanel";
 import { ProspectingCandidatePanel } from "@/components/ProspectingCandidatePanel";
 import { ProspectingClusterCard } from "@/components/ProspectingClusterCard";
 import { ProspectingMap } from "@/components/ProspectingMap";
 import { SimulationPanel } from "@/components/SimulationPanel";
-import { exportProspectingReport, runProspecting } from "@/lib/api";
+import { exportProspectingReport, runProspecting, saveToHistory } from "@/lib/api";
 import type {
   LatLng,
   ProspectingCandidate,
@@ -91,6 +92,8 @@ export default function ProspectingPage() {
   const [aiBriefingMode, setAiBriefingMode] = useState<"site" | "prospecting" | "simulation" | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const abortRef = useRef<AbortController | null>(null);
   const exportAbortRef = useRef<AbortController | null>(null);
 
@@ -153,6 +156,24 @@ export default function ProspectingPage() {
     if (nearest) setSelectedCandidate(nearest);
   }
 
+  async function handleSaveToHistory() {
+    if (!result) return;
+    setSaveLoading(true);
+    setSaveStatus("idle");
+    try {
+      await saveToHistory({
+        runType: "prospecting",
+        label: `${regionName} · ${result.generatedAt.slice(0, 10)}`,
+        payload: result as unknown as Record<string, unknown>,
+      });
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   async function handleExportReport() {
     if (!result) return;
     setExportError(null);
@@ -197,6 +218,7 @@ export default function ProspectingPage() {
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800">
                 Prospecting
               </span>
+              <Link href="/history" className="text-xs text-slate-500 hover:text-emerald-700">History</Link>
             </div>
             <div className="text-xs font-semibold tracking-[0.18em] text-emerald-700">CHITTA</div>
             <h1 className="text-lg font-semibold tracking-tight text-slate-950">
@@ -346,6 +368,17 @@ export default function ProspectingPage() {
                 >
                   {exportLoading ? "Exporting PDF…" : "Export Prospecting Report"}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToHistory}
+                  disabled={saveLoading}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {saveLoading ? "Saving…" : saveStatus === "saved" ? "✓ Saved to History" : "Save to History"}
+                </button>
+                {saveStatus === "error" && (
+                  <div className="text-[10px] text-rose-700">Save failed — is the database running?</div>
+                )}
                 {(simResult || synthesisResult) && (
                   <div className="text-[10px] text-slate-400 space-y-0.5">
                     {simResult && <div>Includes simulation findings</div>}
@@ -485,6 +518,18 @@ export default function ProspectingPage() {
                   }}
                 />
               )}
+            </div>
+          )}
+
+          {/* Development Signals */}
+          {result && (
+            <div>
+              <DevelopmentSignalsPanel
+                regionName={result.region?.name ?? regionName}
+                latitude={centerLat}
+                longitude={centerLng}
+                radiusKm={radiusKm}
+              />
             </div>
           )}
 
