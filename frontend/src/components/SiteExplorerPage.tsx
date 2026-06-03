@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
+import { LayoutPanel } from "@/components/LayoutPanel";
 import { EconomicsPanel } from "@/components/EconomicsPanel";
 import { ConsultantReportView } from "@/components/ConsultantReport";
 import { LocationSearch } from "@/components/LocationSearch";
@@ -15,7 +16,7 @@ import { ScoreCard } from "@/components/ScoreCard";
 import { TopCandidateZones } from "@/components/TopCandidateZones";
 import { exportSiteReport, fetchSiteAnalysis, fetchSiteHeatmap } from "@/lib/api";
 import { DEMO_SITES, getDemoSite, type DemoSite } from "@/lib/demoSites";
-import type { HeatmapCell, LatLng, SiteAnalysisResponse, SiteHeatmapResponse } from "@/lib/types";
+import type { HeatmapCell, LatLng, SiteAnalysisResponse, SiteHeatmapResponse, TurbinePosition } from "@/lib/types";
 
 const DEFAULT_DEMO = DEMO_SITES[0];
 const DEFAULT_CENTER: LatLng = DEFAULT_DEMO.coordinates;
@@ -80,6 +81,8 @@ export default function SiteExplorerPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const exportAbortRef = useRef<AbortController | null>(null);
 
+  const [turbinePositions, setTurbinePositions] = useState<TurbinePosition[] | null>(null);
+
   const applySampleSite = useCallback((site: DemoSite) => {
     setPickedLabel(site.label);
     setCenter(site.coordinates);
@@ -87,6 +90,7 @@ export default function SiteExplorerPage() {
     setActiveSampleId(site.id);
     setHeatmap(null);
     setSelectedHeatmapCell(null);
+    setTurbinePositions(null);
   }, []);
 
   useEffect(() => {
@@ -242,10 +246,12 @@ export default function SiteExplorerPage() {
                 setActiveSampleId(null);
                 setHeatmap(null);
                 setSelectedHeatmapCell(null);
+                setTurbinePositions(null);
               }}
               heatmapCells={heatmap?.cells}
               selectedHeatmapCell={selectedHeatmapCell}
               onHeatmapCellSelect={setSelectedHeatmapCell}
+              turbinePositions={turbinePositions ?? undefined}
             />
           </div>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -402,6 +408,16 @@ export default function SiteExplorerPage() {
           {analysis?.agentAnalysis ? (
             <div className="mt-1">
               <AgentAnalysisPanel agentAnalysis={analysis.agentAnalysis} />
+            </div>
+          ) : null}
+
+          {analysis ? (
+            <div className="mt-1">
+              <LayoutPanel
+                latitude={selected.latitude}
+                longitude={selected.longitude}
+                onLayoutResult={(positions) => setTurbinePositions(positions)}
+              />
             </div>
           ) : null}
 

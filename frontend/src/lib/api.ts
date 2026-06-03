@@ -1,4 +1,6 @@
 import type {
+  LayoutAnalysisRequest,
+  LayoutAnalysisResponse,
   ProspectingReportExportRequest,
   ProspectingRequest,
   ProspectingResponse,
@@ -110,6 +112,28 @@ export async function runProspecting(
   }
 
   return (await res.json()) as ProspectingResponse;
+}
+
+export async function runLayoutAnalysis(
+  req: LayoutAnalysisRequest,
+  signal?: AbortSignal,
+): Promise<LayoutAnalysisResponse> {
+  const url = `${getApiBaseUrl()}/api/layout/analyze`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Layout analysis failed (${res.status}): ${text || res.statusText}`,
+    );
+  }
+
+  return (await res.json()) as LayoutAnalysisResponse;
 }
 
 export async function exportProspectingReport(

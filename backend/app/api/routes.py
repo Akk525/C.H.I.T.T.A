@@ -36,9 +36,12 @@ from app.api.schemas import (
     SiteHeatmapRequest,
     SiteHeatmapResponse,
     SiteReportExportRequest,
+    LayoutAnalysisRequest,
+    LayoutAnalysisResponse,
     ProspectingReportExportRequest,
     SynthesisRequest,
     SynthesisResponse,
+    TurbinePositionSchema,
 )
 from app.providers.base import LatLng
 from app.services.analysis import analyze_site_enriched
@@ -459,6 +462,47 @@ async def run_simulation_endpoint(request: SimulationRequest) -> SimulationRespo
         ),
         methodology=result.methodology,
         auditTrail=result.auditTrail,
+    )
+
+
+@router.post("/api/layout/analyze", response_model=LayoutAnalysisResponse)
+async def analyze_layout(req: LayoutAnalysisRequest) -> LayoutAnalysisResponse:
+    from app.services.layout import LayoutAssumptions, generate_candidate_layout
+
+    wind_defaulted = req.prevailingWindDirectionDeg is None
+    assumptions = LayoutAssumptions(
+        rotor_diameter_m=req.rotorDiameterM,
+        turbine_rating_mw=req.turbineRatingMw,
+        prevailing_wind_direction_deg=req.prevailingWindDirectionDeg if req.prevailingWindDirectionDeg is not None else 270.0,
+    )
+    result = generate_candidate_layout(
+        center_lat=req.latitude,
+        center_lng=req.longitude,
+        turbine_count=req.turbineCount,
+        assumptions=assumptions,
+        wind_direction_was_defaulted=wind_defaulted,
+    )
+    a = result.assumptions
+    assumptions_dict = {
+        "rotorDiameterM": f"{a.rotor_diameter_m:.0f} m",
+        "turbineRatingMw": f"{a.turbine_rating_mw:.1f} MW",
+        "crosswindSpacing": f"{a.crosswind_spacing_rotor_diameters:.1f}D ({a.crosswind_spacing_rotor_diameters * a.rotor_diameter_m:.0f} m)",
+        "downwindSpacing": f"{a.downwind_spacing_rotor_diameters:.1f}D ({a.downwind_spacing_rotor_diameters * a.rotor_diameter_m:.0f} m)",
+        "prevailingWindFrom": f"{a.prevailing_wind_direction_deg:.0f}° {'(defaulted)' if wind_defaulted else '(provided)'}",
+        "wakeDecayConstant": str(a.wake_decay_constant),
+        "thrustCoefficient": str(a.thrust_coefficient),
+    }
+    return LayoutAnalysisResponse(
+        layoutId=result.layout_id,
+        turbines=[TurbinePositionSchema(id=t.id, latitude=t.latitude, longitude=t.longitude) for t in result.turbines],
+        spacingViolations=result.spacing_violations,
+        estimatedWakeLossPercent=result.estimated_wake_loss_percent,
+        layoutEfficiencyScore=result.layout_efficiency_score,
+        assumptions=assumptions_dict,
+        warnings=result.warnings,
+        methodology=result.methodology,
+        auditTrail=result.audit_trail,
+        generatedAt=result.generated_at,
     )
 
 

@@ -350,3 +350,33 @@ class ProspectingReportExportRequest(BaseModel):
     prospecting: ProspectingResponse
     simulation: SimulationResponse | None = None
     synthesis: SynthesisResponse | None = None
+
+
+# ── Layout Analysis ─────────────────────────────────────────────────────────────
+
+class LayoutAnalysisRequest(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    turbineCount: int = Field(default=10, ge=1, le=50)
+    turbineRatingMw: float = Field(default=3.0, gt=0)
+    rotorDiameterM: float = Field(default=120.0, gt=0)
+    prevailingWindDirectionDeg: float | None = Field(default=None, ge=0, lt=360)
+
+
+class TurbinePositionSchema(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+
+
+class LayoutAnalysisResponse(BaseModel):
+    layoutId: str
+    turbines: list[TurbinePositionSchema]
+    spacingViolations: int
+    estimatedWakeLossPercent: float
+    layoutEfficiencyScore: float
+    assumptions: dict[str, str]
+    warnings: list[str]
+    methodology: dict[str, str]
+    auditTrail: list[str]
+    generatedAt: str

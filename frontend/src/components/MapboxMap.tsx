@@ -2,7 +2,7 @@
 
 import mapboxgl, { LngLatLike, Map as MapboxMapImpl, Marker } from "mapbox-gl";
 import { useEffect, useMemo, useRef } from "react";
-import type { HeatmapCell, LatLng } from "@/lib/types";
+import type { HeatmapCell, LatLng, TurbinePosition } from "@/lib/types";
 
 type MapState = {
   map: MapboxMapImpl;
@@ -12,6 +12,8 @@ type MapState = {
 
 const HEATMAP_SOURCE_ID = "chitta-heatmap";
 const HEATMAP_LAYER_ID = "chitta-heatmap-circles";
+const TURBINE_SOURCE_ID = "chitta-turbines";
+const TURBINE_LAYER_ID = "chitta-turbine-circles";
 
 function toLngLatLike(v: LatLng): LngLatLike {
   return [v.longitude, v.latitude];
@@ -44,6 +46,7 @@ export function MapboxMap({
   heatmapCells,
   onHeatmapCellSelect,
   selectedHeatmapCell,
+  turbinePositions,
 }: {
   token: string | null;
   center: LatLng;
@@ -52,12 +55,14 @@ export function MapboxMap({
   heatmapCells?: HeatmapCell[];
   onHeatmapCellSelect?: (cell: HeatmapCell) => void;
   selectedHeatmapCell?: HeatmapCell | null;
+  turbinePositions?: TurbinePosition[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<MapState | null>(null);
   const onSelectRef = useRef(onSelect);
   const onHeatmapCellSelectRef = useRef(onHeatmapCellSelect);
   const heatmapCellsRef = useRef(heatmapCells);
+  const turbinePositionsRef = useRef(turbinePositions);
 
   const canRender = useMemo(() => Boolean(token?.trim()), [token]);
 
@@ -72,6 +77,10 @@ export function MapboxMap({
   useEffect(() => {
     heatmapCellsRef.current = heatmapCells;
   }, [heatmapCells]);
+
+  useEffect(() => {
+    turbinePositionsRef.current = turbinePositions;
+  }, [turbinePositions]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -161,6 +170,24 @@ export function MapboxMap({
         },
       });
 
+      // Turbine layout layer
+      map.addSource(TURBINE_SOURCE_ID, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: TURBINE_LAYER_ID,
+        type: "circle",
+        source: TURBINE_SOURCE_ID,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 5, 12, 9],
+          "circle-color": "#f59e0b",
+          "circle-opacity": 0.92,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#1c1917",
+        },
+      });
+
       map.on("mouseenter", HEATMAP_LAYER_ID, (e) => {
         map.getCanvas().style.cursor = "pointer";
         const feature = e.features?.[0];
@@ -242,6 +269,35 @@ export function MapboxMap({
     }
   }, [heatmapCells, selectedHeatmapCell]);
 
+  useEffect(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    const map = st.map;
+
+    const updateTurbines = () => {
+      const source = map.getSource(TURBINE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+      if (!source) return;
+      if (!turbinePositions?.length) {
+        source.setData({ type: "FeatureCollection", features: [] });
+        return;
+      }
+      source.setData({
+        type: "FeatureCollection",
+        features: turbinePositions.map((t) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [t.longitude, t.latitude] },
+          properties: { id: t.id },
+        })),
+      });
+    };
+
+    if (map.isStyleLoaded()) {
+      updateTurbines();
+    } else {
+      map.once("load", updateTurbines);
+    }
+  }, [turbinePositions]);
+
   if (!canRender) {
     return (
       <div className="chitta-card chitta-surface flex h-full w-full items-center justify-center rounded-xl p-6 text-center text-sm text-slate-600">
@@ -254,15 +310,25 @@ export function MapboxMap({
   return (
     <div className="chitta-card relative h-full w-full overflow-hidden rounded-xl bg-white shadow-sm">
       <div ref={containerRef} className="h-full w-full" />
-      {heatmapCells?.length ? (
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-slate-900/90 px-3 py-2 text-xs text-slate-100 shadow-md">
-          <div className="font-medium">Suitability</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="inline-block h-2 w-8 rounded bg-red-800" /> Low
-            <span className="inline-block h-2 w-8 rounded bg-amber-700" /> Mid
-            <span className="inline-block h-2 w-8 rounded bg-emerald-800" /> High
-            <span className="inline-block h-2 w-8 rounded bg-slate-600" /> Unavailable
-          </div>
+      {(heatmapCells?.length || turbinePositions?.length) ? (
+        <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-slate-900/90 px-3 py-2 text-xs text-slate-100 shadow-md space-y-1.5">
+          {heatmapCells?.length ? (
+            <>
+              <div className="font-medium">Suitability</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-block h-2 w-8 rounded bg-red-800" /> Low
+                <span className="inline-block h-2 w-8 rounded bg-amber-700" /> Mid
+                <span className="inline-block h-2 w-8 rounded bg-emerald-800" /> High
+                <span className="inline-block h-2 w-8 rounded bg-slate-600" /> N/A
+              </div>
+            </>
+          ) : null}
+          {turbinePositions?.length ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
+              <span>Turbines ({turbinePositions.length})</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -376,3 +376,33 @@ export type ProspectingReportExportRequest = {
   simulation?: SimulationResponse | null;
   synthesis?: SynthesisResponse | null;
 };
+
+// ── Layout Analysis ────────────────────────────────────────────────────────────
+
+export type LayoutAnalysisRequest = {
+  latitude: number;
+  longitude: number;
+  turbineCount?: number;
+  turbineRatingMw?: number;
+  rotorDiameterM?: number;
+  prevailingWindDirectionDeg?: number | null;
+};
+
+export type TurbinePosition = {
+  id: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type LayoutAnalysisResponse = {
+  layoutId: string;
+  turbines: TurbinePosition[];
+  spacingViolations: number;
+  estimatedWakeLossPercent: number;
+  layoutEfficiencyScore: number;
+  assumptions: Record<string, string>;
+  warnings: string[];
+  methodology: Record<string, string>;
+  auditTrail: string[];
+  generatedAt: string;
+};
