@@ -121,6 +121,138 @@ def _terrain_findings(analysis: SiteAnalysisResponse) -> list[str]:
     return findings
 
 
+_LEVEL_LABELS = {"high": "HIGH RISK", "medium": "MEDIUM RISK", "low": "LOW RISK", "unknown": "UNKNOWN"}
+_SEVERITY_LABELS = {"critical": "CRITICAL", "warning": "WARNING"}
+
+
+def _development_risk_section(analysis: SiteAnalysisResponse, styles: dict) -> list[Any]:
+    do = analysis.developmentOutlook
+    if do is None:
+        return []
+
+    flow: list[Any] = []
+    flow += _section_heading("Development Risk Assessment", styles)
+
+    outlook_label = do.developmentOutlook.upper().replace("_", " ")
+    flow.append(
+        Paragraph(
+            f"<b>Development Outlook: {_esc(outlook_label)}</b>",
+            ParagraphStyle(
+                "OutlookLabel",
+                parent=styles["Body"],
+                fontSize=11,
+                textColor=ACCENT,
+                spaceAfter=6,
+            ),
+        )
+    )
+    flow.append(Paragraph(_esc(do.narrativeSummary), styles["Body"]))
+    flow.append(Spacer(1, 6))
+
+    fitness = do.fitnessTest
+    flow.append(
+        Paragraph(
+            f"<b>Project fitness:</b> {fitness.testsPassed}/{fitness.totalTests} tests passed — Risk band: {_esc(fitness.riskBand.upper().replace('_', ' '))}",
+            styles["Body"],
+        )
+    )
+    flow.append(Spacer(1, 6))
+
+    # Fatal flaws
+    if do.fatalFlaws:
+        flow.append(Paragraph("<b>Potential Fatal Flaws</b>", styles["Body"]))
+        flow.append(Spacer(1, 4))
+        ff_rows = [["Severity", "Category", "Description", "Next Step"]]
+        for ff in do.fatalFlaws:
+            ff_rows.append([
+                _SEVERITY_LABELS.get(ff.severity, ff.severity.upper()),
+                _esc(ff.category),
+                _esc(ff.description[:120] + "…" if len(ff.description) > 120 else ff.description),
+                _esc(ff.nextStep[:80] + "…" if len(ff.nextStep) > 80 else ff.nextStep),
+            ])
+        ff_table = Table(ff_rows, colWidths=[0.8 * inch, 1.2 * inch, 2.6 * inch, 1.9 * inch])
+        ff_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#9f1239")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fff1f2")]),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        flow.append(ff_table)
+        flow.append(Spacer(1, 8))
+
+    # Risk register
+    flow.append(Paragraph("<b>Risk Register</b>", styles["Body"]))
+    flow.append(Spacer(1, 4))
+    rr_rows = [["Category", "Level", "Knowledge", "Summary"]]
+    for item in do.riskRegister.categories:
+        rr_rows.append([
+            _esc(item.category),
+            _LEVEL_LABELS.get(item.level, item.level.upper()),
+            _esc(item.knowledgeClass.replace("_", " ")),
+            _esc(item.summary[:100] + "…" if len(item.summary) > 100 else item.summary),
+        ])
+    rr_table = Table(rr_rows, colWidths=[1.4 * inch, 0.85 * inch, 1.1 * inch, 3.15 * inch])
+    rr_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_BG]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(rr_table)
+    flow.append(Spacer(1, 8))
+
+    # Fitness test summary
+    flow.append(Paragraph("<b>Project Fitness Test Results</b>", styles["Body"]))
+    flow.append(Spacer(1, 4))
+    ft_rows = [["Test", "Result", "Impact"]]
+    for test in fitness.tests:
+        ft_rows.append([
+            _esc(test.testName),
+            "PASS" if test.passed else "FAIL",
+            _esc(test.impactSummary[:80] + "…" if len(test.impactSummary) > 80 else test.impactSummary),
+        ])
+    ft_table = Table(ft_rows, colWidths=[2.5 * inch, 0.6 * inch, 3.4 * inch])
+    ft_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_BG]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(ft_table)
+    flow.append(Spacer(1, 8))
+
+    # Next investigation priorities
+    if do.nextInvestigationPriorities:
+        flow.append(Paragraph("<b>Next Investigation Priorities</b>", styles["Body"]))
+        for i, priority in enumerate(do.nextInvestigationPriorities, 1):
+            flow.append(Paragraph(f"{i}. {_esc(priority)}", styles["Body"]))
+            flow.append(Spacer(1, 3))
+        flow.append(Spacer(1, 4))
+
+    return flow
+
+
 def generate_site_report_pdf(
     analysis: SiteAnalysisResponse,
     heatmap: SiteHeatmapResponse | None = None,
@@ -323,6 +455,8 @@ def generate_site_report_pdf(
         story.append(Spacer(1, 6))
         story += _bullet_list(em.limitations[:4], styles["Disclaimer"])
         story.append(Spacer(1, 8))
+
+    story += _development_risk_section(analysis, styles)
 
     story += _section_heading("Wind Findings", styles)
     story += _bullet_list(_wind_findings(analysis), styles["Body"])

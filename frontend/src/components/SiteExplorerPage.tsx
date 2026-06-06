@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
+import { DevelopmentRiskPanel } from "@/components/DevelopmentRiskPanel";
 import { DevelopmentSignalsPanel } from "@/components/DevelopmentSignalsPanel";
 import { LayoutPanel } from "@/components/LayoutPanel";
 import { EconomicsPanel } from "@/components/EconomicsPanel";
@@ -26,9 +27,10 @@ import type { HeatmapCell, LatLng, SiteAnalysisResponse, SiteHeatmapResponse, Tu
 const DEFAULT_DEMO = DEMO_SITES[0];
 const DEFAULT_CENTER: LatLng = DEFAULT_DEMO.coordinates;
 
-type ResultsTab = "overview" | "agents" | "report" | "tools" | "ai";
+type ResultsTab = "risk" | "overview" | "agents" | "report" | "tools" | "ai";
 
 const RESULT_TABS: { id: ResultsTab; label: string }[] = [
+  { id: "risk", label: "Risk" },
   { id: "overview", label: "Overview" },
   { id: "agents", label: "Agents" },
   { id: "report", label: "Report" },
@@ -57,6 +59,16 @@ function toneForScore(v: number | null | undefined): "neutral" | "good" | "warn"
   if (v >= 75) return "good";
   if (v < 45) return "warn";
   return "neutral";
+}
+
+function outlookTone(verdict: string): "success" | "warn" | "sky" | "danger" {
+  switch (verdict) {
+    case "promising":       return "success";
+    case "fragile":         return "sky";
+    case "high_risk":       return "warn";
+    case "not_recommended": return "danger";
+    default:                return "warn";
+  }
 }
 
 function providerBadge(v: unknown) {
@@ -110,14 +122,14 @@ export default function SiteExplorerPage() {
     setHeatmap(null);
     setSelectedHeatmapCell(null);
     setTurbinePositions(null);
-    setResultsTab("overview");
+    setResultsTab("risk");
   }, []);
 
   const resetSiteContext = useCallback(() => {
     setHeatmap(null);
     setSelectedHeatmapCell(null);
     setTurbinePositions(null);
-    setResultsTab("overview");
+    setResultsTab("risk");
   }, []);
 
   useEffect(() => {
@@ -146,7 +158,7 @@ export default function SiteExplorerPage() {
       fetchSiteAnalysis(selected, abortRef.current.signal)
         .then((res) => {
           setAnalysis(res);
-          setResultsTab("overview");
+          setResultsTab("risk");
         })
         .catch((e: unknown) => {
           const msg = e instanceof Error ? e.message : "Unknown error";
@@ -334,9 +346,16 @@ export default function SiteExplorerPage() {
                     {formatScore(total, loading && !analysis)}
                   </p>
                 </div>
-                {coordinatorDecision ? (
-                  <Badge tone="success">{coordinatorDecision}</Badge>
-                ) : null}
+                <div className="flex flex-wrap gap-1">
+                  {analysis?.developmentOutlook ? (
+                    <Badge tone={outlookTone(analysis.developmentOutlook.developmentOutlook)}>
+                      {analysis.developmentOutlook.developmentOutlook.replace(/_/g, " ")}
+                    </Badge>
+                  ) : null}
+                  {coordinatorDecision ? (
+                    <Badge tone="success">{coordinatorDecision}</Badge>
+                  ) : null}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <ScoreCard
@@ -482,6 +501,14 @@ export default function SiteExplorerPage() {
                 <p className="text-sm text-slate-500">
                   Pick a site on the map to generate reports.
                 </p>
+              ) : null}
+
+              {resultsTab === "risk" && analysis?.developmentOutlook ? (
+                <DevelopmentRiskPanel outlook={analysis.developmentOutlook} />
+              ) : null}
+
+              {resultsTab === "risk" && analysis && !analysis.developmentOutlook ? (
+                <p className="text-sm text-slate-500">Risk assessment unavailable for this run.</p>
               ) : null}
 
               {resultsTab === "overview" && analysis ? (

@@ -117,6 +117,67 @@ class AgentAnalysis(BaseModel):
     coordinator: CoordinatorOutput
 
 
+class RiskEvidenceItemSchema(BaseModel):
+    label: str
+    value: str
+    source: str
+
+
+class RiskItemSchema(BaseModel):
+    category: str
+    level: str
+    confidence: float
+    knowledgeClass: str
+    summary: str
+    evidence: list[RiskEvidenceItemSchema]
+    potentialFatalFlaw: bool
+    recommendedNextStep: str
+
+
+class FatalFlawSchema(BaseModel):
+    id: str
+    category: str
+    severity: str
+    description: str
+    evidence: str
+    nextStep: str
+
+
+class RiskRegisterSchema(BaseModel):
+    categories: list[RiskItemSchema]
+    fatalFlaws: list[FatalFlawSchema]
+    fatalFlawCount: int
+    criticalFatalFlawCount: int
+
+
+class FitnessTestResultSchema(BaseModel):
+    testName: str
+    passed: bool
+    impactSummary: str
+    beforeMetrics: dict
+    afterMetrics: dict
+    failureReason: str | None = None
+
+
+class FitnessResultSchema(BaseModel):
+    tests: list[FitnessTestResultSchema]
+    testsPassed: int
+    totalTests: int
+    fitnessScore: float
+    riskBand: str
+    mostVulnerableAssumptions: list[str]
+    interpretation: str
+
+
+class DevelopmentOutlookSchema(BaseModel):
+    developmentOutlook: str
+    riskRegister: RiskRegisterSchema
+    fatalFlaws: list[FatalFlawSchema]
+    fitnessTest: FitnessResultSchema
+    narrativeSummary: str
+    nextInvestigationPriorities: list[str]
+
+
 class SiteAnalysisResponse(BaseModel):
     analysisId: str
     methodology: MethodologyMetadata
@@ -127,6 +188,7 @@ class SiteAnalysisResponse(BaseModel):
     report: ConsultantReport
     agentAnalysis: AgentAnalysis | None = None
     economicMetrics: EconomicMetricsSchema | None = None
+    developmentOutlook: DevelopmentOutlookSchema | None = None
     debug: dict[str, object] | None = None
 
 

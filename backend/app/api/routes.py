@@ -22,12 +22,19 @@ from app.api.schemas import (
     AgentOutput,
     CandidateRankingChange,
     CoordinatorOutput,
+    DevelopmentOutlookSchema,
     EconomicAssumptionsSchema,
     EconomicMetricsSchema,
+    FatalFlawSchema,
+    FitnessResultSchema,
+    FitnessTestResultSchema,
     ProspectingCandidateSchema,
     ProspectingClusterSchema,
     ProspectingRequest,
     ProspectingResponse,
+    RiskEvidenceItemSchema,
+    RiskItemSchema,
+    RiskRegisterSchema,
     SimulatedCandidateSchema,
     SimulationRequest,
     SimulationResponse,
@@ -68,6 +75,8 @@ from app.services.simulation import (
     run_simulation,
 )
 from app.services.scoring import apply_economic_nudge
+from app.services.risk import RiskRegisterResult, DevelopmentOutlookResult, compute_risk_register, compose_development_outlook
+from app.services.fitness import FitnessResult, run_fitness_test
 from app.services.methodology import (
     build_methodology,
     build_site_audit_trail,
@@ -114,6 +123,63 @@ def _eco_to_schema(eco: "object") -> EconomicMetricsSchema:
             discountRate=a.discount_rate,
         ),
         limitations=e.limitations,
+    )
+
+
+def _outlook_to_schema(
+    risk_reg: RiskRegisterResult,
+    fitness: FitnessResult,
+    outlook: DevelopmentOutlookResult,
+) -> DevelopmentOutlookSchema:
+    risk_categories = [
+        RiskItemSchema(
+            category=r.category,
+            level=r.level,
+            confidence=r.confidence,
+            knowledgeClass=r.knowledgeClass,
+            summary=r.summary,
+            evidence=[RiskEvidenceItemSchema(label=e.label, value=e.value, source=e.source) for e in r.evidence],
+            potentialFatalFlaw=r.potentialFatalFlaw,
+            recommendedNextStep=r.recommendedNextStep,
+        )
+        for r in risk_reg.categories
+    ]
+    fatal_flaws = [
+        FatalFlawSchema(id=f.id, category=f.category, severity=f.severity,
+                        description=f.description, evidence=f.evidence, nextStep=f.nextStep)
+        for f in risk_reg.fatalFlaws
+    ]
+    fitness_tests = [
+        FitnessTestResultSchema(
+            testName=t.testName,
+            passed=t.passed,
+            impactSummary=t.impactSummary,
+            beforeMetrics=t.beforeMetrics,
+            afterMetrics=t.afterMetrics,
+            failureReason=t.failureReason,
+        )
+        for t in fitness.tests
+    ]
+    return DevelopmentOutlookSchema(
+        developmentOutlook=outlook.developmentOutlook,
+        riskRegister=RiskRegisterSchema(
+            categories=risk_categories,
+            fatalFlaws=fatal_flaws,
+            fatalFlawCount=risk_reg.fatalFlawCount,
+            criticalFatalFlawCount=risk_reg.criticalFatalFlawCount,
+        ),
+        fatalFlaws=fatal_flaws,
+        fitnessTest=FitnessResultSchema(
+            tests=fitness_tests,
+            testsPassed=fitness.testsPassed,
+            totalTests=fitness.totalTests,
+            fitnessScore=fitness.fitnessScore,
+            riskBand=fitness.riskBand,
+            mostVulnerableAssumptions=fitness.mostVulnerableAssumptions,
+            interpretation=fitness.interpretation,
+        ),
+        narrativeSummary=outlook.narrativeSummary,
+        nextInvestigationPriorities=outlook.nextInvestigationPriorities,
     )
 
 
@@ -233,6 +299,32 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     ]
     coordinator_out = CoordinatorAgent().run(agents_out, agent_ctx)
 
+    risk_reg = compute_risk_register(
+        wind_score=wind_score,
+        wind_speed_at_hub=wind_speed_at_hub,
+        confidence_score=confidence_score,
+        terrain_score=terrain_score,
+        terrain_complexity=terrain_complexity,
+        slope_pct=slope_pct,
+        infra_score=infra_s,
+        nearest_road_m=nearest_road,
+        nearest_powerline_m=nearest_power,
+        settlement_count_15km=settlement_count,
+        env_score=env_s,
+        land_cover_class=lc_class,
+        protected_area_risk=pa_risk,
+        in_protected_area=in_pa,
+        eco=eco,
+    )
+    fitness_result = run_fitness_test(
+        wind_speed_at_hub=wind_speed_at_hub,
+        terrain_score=terrain_score,
+        infra_score=infra_s,
+        eco=eco,
+        confidence_score=confidence_score,
+    )
+    outlook_result = compose_development_outlook(risk_reg, fitness_result, total)
+
     agent_analysis = AgentAnalysis(
         agents=[_to_pydantic_agent(a) for a in agents_out],
         coordinator=CoordinatorOutput(
@@ -312,6 +404,7 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
         report=report,  # type: ignore[arg-type]
         agentAnalysis=agent_analysis,
         economicMetrics=_eco_to_schema(eco),
+        developmentOutlook=_outlook_to_schema(risk_reg, fitness_result, outlook_result),
         debug={**sources_debug},
     )
 

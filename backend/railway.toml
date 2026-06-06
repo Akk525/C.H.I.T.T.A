@@ -1,0 +1,11 @@
+# Railway config for the API service.
+# In the dashboard: Root Directory = backend, Config file = /backend/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

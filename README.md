@@ -58,6 +58,22 @@ CHITTA is a full-stack climate-tech demo built across 9 development phases. It c
 
 ---
 
+## Risk-First Analysis
+
+The original CHITTA system was optimised for identifying *positive* suitability signals: a composite score that weighted wind, terrain, infrastructure, environmental, population, and confidence dimensions. The total suitability score was treated as the headline answer.
+
+After expert feedback from early-stage wind developers (Wind Pioneers framework), the system was redesigned around a different question: **"Will this project survive development?"** Suitability is preserved as one input, but it is no longer the final word.
+
+The risk-first layer adds three deterministic engines on top of existing scoring:
+
+- **Risk Register** — nine categories (Wind Resource, Grid Connection, Land Access, Environmental Constraints, Community/Social, Permitting/Regulatory, Economics, Constructability, Data Quality). Each category returns a level (low/medium/high/unknown), a knowledge class (known known / known unknown / unknown known / unknown unknown), and a recommended next step. Missing data raises uncertainty — it does not silently pass.
+- **Fatal Flaw Detection** — conditions that are likely to stop a project entirely (e.g. inside a protected area, wind speed below viability threshold, negative NPV). Surfaced as critical or warning severity flags.
+- **Project Fitness Test** — ten deterministic stress tests: wind speed −0.5 and −1.0 m/s, electricity price −20%, CAPEX +20%, turbine count −20%, environmental area loss, grid constraint, doubled setbacks, loss factor +5pp, and a data quality penalty. Each test returns pass/fail with before/after metrics.
+
+The combined output produces a **Development Outlook** verdict: `promising`, `fragile`, `high_risk`, or `not_recommended`. This is the primary display on the site analysis page; suitability scores are secondary context.
+
+---
+
 ## Architecture
 
 ```
@@ -194,32 +210,34 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Deployment
 
-### Backend (Docker + Render)
+### Railway (recommended)
+
+Production URLs (after deploy):
+
+- **App:** https://chitta-web-production.up.railway.app  
+- **API:** https://chitta-api-production.up.railway.app  
+- **Health:** https://chitta-api-production.up.railway.app/health  
 
 ```bash
-# Build
-docker build -t chitta-backend backend/
+railway login
+./scripts/railway-deploy.sh
+```
 
-# Run locally
+Full checklist: [docs/railway-deploy.md](docs/railway-deploy.md). Services use `backend/railway.toml` (Dockerfile) and `frontend/railway.toml` (Nixpacks, Node 20). Postgres + Run History are enabled in production. Auto-deploy: [GitHub setup](scripts/railway-github-setup.md) (add `RAILWAY_TOKEN` secret).
+
+### Local Docker (backend)
+
+```bash
+docker build -t chitta-backend backend/
 docker run -p 8000:8000 \
   -e PERSIST_ANALYSES=false \
   -e CORS_ORIGINS=http://localhost:3000 \
   chitta-backend
-
-# Deploy to Render — push render.yaml to repo root,
-# connect repo in Render dashboard, set DATABASE_URL secret
 ```
 
-### Frontend (Vercel)
+### Render (optional)
 
-```bash
-# From frontend/ directory or via Vercel dashboard
-vercel --prod
-
-# Set env vars in Vercel dashboard:
-# NEXT_PUBLIC_MAPBOX_TOKEN
-# NEXT_PUBLIC_API_BASE_URL=https://your-chitta-backend.onrender.com
-```
+See [render.yaml](render.yaml) for an alternate backend host.
 
 ---
 
@@ -240,6 +258,7 @@ vercel --prod
 
 - [Portfolio case study](docs/case-study.md)
 - [Final report](FINAL_REPORT.md)
+- [Railway deployment](docs/railway-deploy.md)
 - [Render deployment config](render.yaml)
 
 ---

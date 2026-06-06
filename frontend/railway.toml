@@ -1,0 +1,10 @@
+# Railway config for the Next.js frontend.
+# In the dashboard: Root Directory = frontend, Config file = /frontend/railway.toml
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm run start"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"

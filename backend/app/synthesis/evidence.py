@@ -260,6 +260,36 @@ def _site_packets(analysis: SiteAnalysisResponse) -> list[EvidencePacket]:
             quality="computed",
         ))
 
+    # ── Development Risk evidence ──────────────────────────────────────────────
+    do = analysis.developmentOutlook
+    if do is not None:
+        packets.append(_pkt(
+            "risk:outlook", "risk", "Development outlook",
+            do.developmentOutlook, None, "CHITTA Risk Engine", "computed",
+        ))
+        packets.append(_pkt(
+            "risk:fatal_flaw_count", "risk", "Fatal flaw count",
+            float(do.riskRegister.fatalFlawCount), None, "CHITTA Risk Engine", "computed", 0,
+        ))
+        packets.append(_pkt(
+            "risk:critical_flaw_count", "risk", "Critical fatal flaw count",
+            float(do.riskRegister.criticalFatalFlawCount), None, "CHITTA Risk Engine", "computed", 0,
+        ))
+        packets.append(_pkt(
+            "risk:fitness_score", "risk", "Project fitness score",
+            do.fitnessTest.fitnessScore, "/10", "CHITTA Fitness Engine", "computed", 1,
+        ))
+        packets.append(_pkt(
+            "risk:fitness_band", "risk", "Project risk band",
+            do.fitnessTest.riskBand, None, "CHITTA Fitness Engine", "computed",
+        ))
+        for item in do.riskRegister.categories:
+            slug = item.category.lower().replace(" / ", "_").replace("/", "_").replace(" ", "_")
+            packets.append(_pkt(
+                f"risk:{slug}:level", "risk", f"{item.category} risk level",
+                item.level, None, "CHITTA Risk Engine", "computed",
+            ))
+
     return [p for p in packets if p is not None]
 
 

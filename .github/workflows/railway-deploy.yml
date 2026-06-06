@@ -1,0 +1,66 @@
+# Deploy CHITTA to Railway on push to main/master.
+# Add repo secret RAILWAY_TOKEN: https://railway.com/account/tokens
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: railway-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RAILWAY_PROJECT_ID: 46843ad5-3f4c-4afd-8b18-f81e1d5b8a5e
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/railway-deploy.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/railway-deploy.yml'
+
+  deploy-api:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy chitta-api
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link --project "${RAILWAY_PROJECT_ID}" --environment production
+          railway up backend --path-as-root -s chitta-api --detach
+
+  deploy-web:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy chitta-web
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link --project "${RAILWAY_PROJECT_ID}" --environment production
+          railway up frontend --path-as-root -s chitta-web --detach

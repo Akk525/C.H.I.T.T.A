@@ -56,6 +56,79 @@ export type ConsultantReport = {
   dataSources: string[];
 };
 
+// ── Development Risk types ────────────────────────────────────────────────────
+
+export type RiskLevel = "low" | "medium" | "high" | "unknown";
+export type KnowledgeClass =
+  | "known_known"
+  | "known_unknown"
+  | "unknown_known"
+  | "unknown_unknown";
+export type DevelopmentOutlookVerdict =
+  | "promising"
+  | "fragile"
+  | "high_risk"
+  | "not_recommended";
+
+export type RiskEvidenceItem = {
+  label: string;
+  value: string;
+  source: string;
+};
+
+export type RiskItem = {
+  category: string;
+  level: RiskLevel;
+  confidence: number;
+  knowledgeClass: KnowledgeClass;
+  summary: string;
+  evidence: RiskEvidenceItem[];
+  potentialFatalFlaw: boolean;
+  recommendedNextStep: string;
+};
+
+export type FatalFlaw = {
+  id: string;
+  category: string;
+  severity: "warning" | "critical";
+  description: string;
+  evidence: string;
+  nextStep: string;
+};
+
+export type FitnessTestResult = {
+  testName: string;
+  passed: boolean;
+  impactSummary: string;
+  beforeMetrics: Record<string, unknown>;
+  afterMetrics: Record<string, unknown>;
+  failureReason: string | null;
+};
+
+export type FitnessResult = {
+  tests: FitnessTestResult[];
+  testsPassed: number;
+  totalTests: number;
+  fitnessScore: number;
+  riskBand: "low" | "medium" | "high" | "very_high";
+  mostVulnerableAssumptions: string[];
+  interpretation: string;
+};
+
+export type DevelopmentOutlook = {
+  developmentOutlook: DevelopmentOutlookVerdict;
+  riskRegister: {
+    categories: RiskItem[];
+    fatalFlaws: FatalFlaw[];
+    fatalFlawCount: number;
+    criticalFatalFlawCount: number;
+  };
+  fatalFlaws: FatalFlaw[];
+  fitnessTest: FitnessResult;
+  narrativeSummary: string;
+  nextInvestigationPriorities: string[];
+};
+
 export type SiteAnalysisResponse = {
   analysisId: string;
   methodology: MethodologyMetadata;
@@ -66,6 +139,7 @@ export type SiteAnalysisResponse = {
   report: ConsultantReport;
   agentAnalysis?: AgentAnalysis | null;
   economicMetrics?: EconomicMetrics | null;
+  developmentOutlook?: DevelopmentOutlook | null;
   debug?: Record<string, unknown>;
 };
 

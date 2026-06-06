@@ -55,5 +55,8 @@ infra/**/*.log
 # Logs
 *.log
 
+# Railway CLI local link state
+.railway/
+
 # Misc
 *.pem
