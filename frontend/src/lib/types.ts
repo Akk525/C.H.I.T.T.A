@@ -129,6 +129,41 @@ export type DevelopmentOutlook = {
   nextInvestigationPriorities: string[];
 };
 
+// ── Evidence Quality types ────────────────────────────────────────────────────
+
+export type EvidenceQuality = "high" | "medium" | "low";
+
+export type EvidenceQualityItem = {
+  dimension: string;
+  source: string;
+  quality: EvidenceQuality;
+  confidence: number;
+  limitations: string[];
+  potentialError: string;
+};
+
+export type EvidenceQualityReport = {
+  items: EvidenceQualityItem[];
+  overallQuality: EvidenceQuality;
+  overallConfidence: number;
+};
+
+// ── Information Value types ───────────────────────────────────────────────────
+
+export type InformationValueItem = {
+  category: string;
+  informationGap: string;
+  impact: number;
+  uncertainty: number;
+  informationValue: number;
+  recommendedAction: string;
+};
+
+export type InformationValueReport = {
+  items: InformationValueItem[];
+  topPriority: string | null;
+};
+
 export type SiteAnalysisResponse = {
   analysisId: string;
   methodology: MethodologyMetadata;
@@ -140,6 +175,8 @@ export type SiteAnalysisResponse = {
   agentAnalysis?: AgentAnalysis | null;
   economicMetrics?: EconomicMetrics | null;
   developmentOutlook?: DevelopmentOutlook | null;
+  evidenceQuality?: EvidenceQualityReport | null;
+  informationValue?: InformationValueReport | null;
   debug?: Record<string, unknown>;
 };
 

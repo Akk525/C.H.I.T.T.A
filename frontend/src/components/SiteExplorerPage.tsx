@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAnalysisPanel } from "@/components/AgentAnalysisPanel";
 import { AIBriefingPanel } from "@/components/AIBriefingPanel";
 import { DevelopmentRiskPanel } from "@/components/DevelopmentRiskPanel";
+import { EvidenceQualityPanel } from "@/components/EvidenceQualityPanel";
+import { InformationValuePanel } from "@/components/InformationValuePanel";
 import { DevelopmentSignalsPanel } from "@/components/DevelopmentSignalsPanel";
 import { LayoutPanel } from "@/components/LayoutPanel";
 import { EconomicsPanel } from "@/components/EconomicsPanel";
@@ -504,7 +506,15 @@ export default function SiteExplorerPage() {
               ) : null}
 
               {resultsTab === "risk" && analysis?.developmentOutlook ? (
-                <DevelopmentRiskPanel outlook={analysis.developmentOutlook} />
+                <div className="space-y-4">
+                  <DevelopmentRiskPanel outlook={analysis.developmentOutlook} />
+                  {analysis.informationValue ? (
+                    <InformationValuePanel report={analysis.informationValue} />
+                  ) : null}
+                  {analysis.evidenceQuality ? (
+                    <EvidenceQualityPanel report={analysis.evidenceQuality} />
+                  ) : null}
+                </div>
               ) : null}
 
               {resultsTab === "risk" && analysis && !analysis.developmentOutlook ? (

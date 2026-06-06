@@ -253,6 +253,116 @@ def _development_risk_section(analysis: SiteAnalysisResponse, styles: dict) -> l
     return flow
 
 
+def _evidence_quality_section(analysis: SiteAnalysisResponse, styles: dict) -> list[Any]:
+    eq = analysis.evidenceQuality
+    if eq is None:
+        return []
+
+    flow: list[Any] = []
+    flow += _section_heading("Evidence Quality Assessment", styles)
+
+    flow.append(
+        Paragraph(
+            f"<b>Overall quality: {_esc(eq.overallQuality.upper())}</b>  |  "
+            f"<b>Data confidence: {eq.overallConfidence:.0f}/100</b>",
+            styles["Body"],
+        )
+    )
+    flow.append(Spacer(1, 6))
+
+    q_rows = [["Dimension", "Source", "Quality", "Confidence", "Potential Error"]]
+    for item in eq.items:
+        q_rows.append([
+            _esc(item.dimension),
+            _esc(item.source[:40] + "…" if len(item.source) > 40 else item.source),
+            _esc(item.quality.upper()),
+            f"{item.confidence:.0f}/100",
+            _esc(item.potentialError[:70] + "…" if len(item.potentialError) > 70 else item.potentialError),
+        ])
+    q_table = Table(q_rows, colWidths=[1.0 * inch, 1.5 * inch, 0.7 * inch, 0.7 * inch, 2.6 * inch])
+    q_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_BG]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(q_table)
+    flow.append(Spacer(1, 6))
+
+    flow.append(
+        Paragraph(
+            "<i>Quality reflects public data availability. All sites require on-site measurement before investment commitment.</i>",
+            styles["Body"],
+        )
+    )
+    flow.append(Spacer(1, 8))
+    return flow
+
+
+def _information_value_section(analysis: SiteAnalysisResponse, styles: dict) -> list[Any]:
+    iv = analysis.informationValue
+    if iv is None:
+        return []
+
+    flow: list[Any] = []
+    flow += _section_heading("Most Valuable Missing Information", styles)
+
+    if iv.topPriority:
+        top = iv.items[0] if iv.items else None
+        if top:
+            flow.append(
+                Paragraph(
+                    f"<b>Top priority: {_esc(iv.topPriority)}</b> — IV {top.informationValue:.1f}/10",
+                    ParagraphStyle("IVTop", parent=styles["Body"], fontSize=10, textColor=ACCENT, spaceAfter=4),
+                )
+            )
+            flow.append(Paragraph(_esc(top.informationGap), styles["Body"]))
+            flow.append(Spacer(1, 6))
+
+    iv_rows = [["Category", "Information Gap", "Impact", "Uncert.", "IV", "Recommended Action"]]
+    for item in iv.items:
+        iv_rows.append([
+            _esc(item.category),
+            _esc(item.informationGap[:55] + "…" if len(item.informationGap) > 55 else item.informationGap),
+            f"{item.impact:.0f}",
+            f"{item.uncertainty:.0f}",
+            f"{item.informationValue:.1f}",
+            _esc(item.recommendedAction[:60] + "…" if len(item.recommendedAction) > 60 else item.recommendedAction),
+        ])
+    iv_table = Table(iv_rows, colWidths=[1.1 * inch, 1.8 * inch, 0.5 * inch, 0.55 * inch, 0.45 * inch, 2.1 * inch])
+    iv_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_BG]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(iv_table)
+    flow.append(Spacer(1, 6))
+
+    flow.append(
+        Paragraph(
+            "<i>IV = Decision Impact × Uncertainty / 10. Higher score means this information would most change the go/no-go decision.</i>",
+            styles["Body"],
+        )
+    )
+    flow.append(Spacer(1, 8))
+    return flow
+
+
 def generate_site_report_pdf(
     analysis: SiteAnalysisResponse,
     heatmap: SiteHeatmapResponse | None = None,
@@ -457,6 +567,8 @@ def generate_site_report_pdf(
         story.append(Spacer(1, 8))
 
     story += _development_risk_section(analysis, styles)
+    story += _information_value_section(analysis, styles)
+    story += _evidence_quality_section(analysis, styles)
 
     story += _section_heading("Wind Findings", styles)
     story += _bullet_list(_wind_findings(analysis), styles["Body"])

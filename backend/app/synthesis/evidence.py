@@ -290,6 +290,43 @@ def _site_packets(analysis: SiteAnalysisResponse) -> list[EvidencePacket]:
                 item.level, None, "CHITTA Risk Engine", "computed",
             ))
 
+    # ── Evidence Quality packets ──────────────────────────────────────────────
+    eq = analysis.evidenceQuality
+    if eq is not None:
+        packets.append(_pkt(
+            "quality:overall", "quality", "Overall evidence quality",
+            eq.overallQuality, None, "CHITTA Quality Engine", "computed",
+        ))
+        packets.append(_pkt(
+            "quality:overall_confidence", "quality", "Overall data confidence",
+            eq.overallConfidence, "/100", "CHITTA Quality Engine", "computed", 1,
+        ))
+        for item in eq.items:
+            slug = item.dimension.lower()
+            packets.append(_pkt(
+                f"quality:{slug}:level", "quality", f"{item.dimension} data quality",
+                item.quality, None, "CHITTA Quality Engine", "computed",
+            ))
+            packets.append(_pkt(
+                f"quality:{slug}:confidence", "quality", f"{item.dimension} confidence",
+                item.confidence, "/100", "CHITTA Quality Engine", "computed", 1,
+            ))
+
+    # ── Information Value packets ─────────────────────────────────────────────
+    iv = analysis.informationValue
+    if iv is not None:
+        if iv.topPriority:
+            packets.append(_pkt(
+                "infovalue:top_priority", "infovalue", "Highest-value missing information",
+                iv.topPriority, None, "CHITTA InfoValue Engine", "computed",
+            ))
+        for item in iv.items[:5]:
+            slug = item.category.lower().replace(" ", "_").replace("/", "_").replace("&", "and")
+            packets.append(_pkt(
+                f"infovalue:{slug}:value", "infovalue", f"Information value: {item.category}",
+                item.informationValue, "/10", "CHITTA InfoValue Engine", "computed", 1,
+            ))
+
     return [p for p in packets if p is not None]
 
 

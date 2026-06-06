@@ -178,6 +178,35 @@ class DevelopmentOutlookSchema(BaseModel):
     nextInvestigationPriorities: list[str]
 
 
+class EvidenceQualityItemSchema(BaseModel):
+    dimension: str
+    source: str
+    quality: str  # "high" | "medium" | "low"
+    confidence: float
+    limitations: list[str]
+    potentialError: str
+
+
+class EvidenceQualityReportSchema(BaseModel):
+    items: list[EvidenceQualityItemSchema]
+    overallQuality: str
+    overallConfidence: float
+
+
+class InformationValueItemSchema(BaseModel):
+    category: str
+    informationGap: str
+    impact: float
+    uncertainty: float
+    informationValue: float
+    recommendedAction: str
+
+
+class InformationValueReportSchema(BaseModel):
+    items: list[InformationValueItemSchema]
+    topPriority: str | None = None
+
+
 class SiteAnalysisResponse(BaseModel):
     analysisId: str
     methodology: MethodologyMetadata
@@ -189,6 +218,8 @@ class SiteAnalysisResponse(BaseModel):
     agentAnalysis: AgentAnalysis | None = None
     economicMetrics: EconomicMetricsSchema | None = None
     developmentOutlook: DevelopmentOutlookSchema | None = None
+    evidenceQuality: EvidenceQualityReportSchema | None = None
+    informationValue: InformationValueReportSchema | None = None
     debug: dict[str, object] | None = None
 
 

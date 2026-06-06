@@ -25,9 +25,13 @@ from app.api.schemas import (
     DevelopmentOutlookSchema,
     EconomicAssumptionsSchema,
     EconomicMetricsSchema,
+    EvidenceQualityItemSchema,
+    EvidenceQualityReportSchema,
     FatalFlawSchema,
     FitnessResultSchema,
     FitnessTestResultSchema,
+    InformationValueItemSchema,
+    InformationValueReportSchema,
     ProspectingCandidateSchema,
     ProspectingClusterSchema,
     ProspectingRequest,
@@ -77,6 +81,8 @@ from app.services.simulation import (
 from app.services.scoring import apply_economic_nudge
 from app.services.risk import RiskRegisterResult, DevelopmentOutlookResult, compute_risk_register, compose_development_outlook
 from app.services.fitness import FitnessResult, run_fitness_test
+from app.services.evidence_quality import EvidenceQualityReport, compute_evidence_quality
+from app.services.information_value import InformationValueReport, compute_information_value
 from app.services.methodology import (
     build_methodology,
     build_site_audit_trail,
@@ -180,6 +186,41 @@ def _outlook_to_schema(
         ),
         narrativeSummary=outlook.narrativeSummary,
         nextInvestigationPriorities=outlook.nextInvestigationPriorities,
+    )
+
+
+def _evidence_quality_to_schema(eq: EvidenceQualityReport) -> EvidenceQualityReportSchema:
+    return EvidenceQualityReportSchema(
+        items=[
+            EvidenceQualityItemSchema(
+                dimension=i.dimension,
+                source=i.source,
+                quality=i.quality,
+                confidence=i.confidence,
+                limitations=i.limitations,
+                potentialError=i.potentialError,
+            )
+            for i in eq.items
+        ],
+        overallQuality=eq.overallQuality,
+        overallConfidence=eq.overallConfidence,
+    )
+
+
+def _info_value_to_schema(iv: InformationValueReport) -> InformationValueReportSchema:
+    return InformationValueReportSchema(
+        items=[
+            InformationValueItemSchema(
+                category=i.category,
+                informationGap=i.informationGap,
+                impact=i.impact,
+                uncertainty=i.uncertainty,
+                informationValue=i.informationValue,
+                recommendedAction=i.recommendedAction,
+            )
+            for i in iv.items
+        ],
+        topPriority=iv.topPriority,
     )
 
 
@@ -325,6 +366,35 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
     )
     outlook_result = compose_development_outlook(risk_reg, fitness_result, total)
 
+    ev_quality = compute_evidence_quality(
+        wind_speed_at_hub=wind_speed_at_hub,
+        terrain_score=terrain_score,
+        nearest_road_m=nearest_road,
+        nearest_powerline_m=nearest_power,
+        settlement_count_15km=settlement_count,
+        env_score=env_s,
+        land_cover_class=lc_class,
+        in_protected_area=in_pa,
+        eco=eco,
+        confidence_score=confidence_score,
+        sources_debug=sources_debug,
+    )
+    info_value = compute_information_value(
+        evidence_quality=ev_quality,
+        risk_register=risk_reg,
+        wind_speed_at_hub=wind_speed_at_hub,
+        nearest_powerline_m=nearest_power,
+        nearest_road_m=nearest_road,
+        settlement_count_15km=settlement_count,
+        env_score=env_s,
+        land_cover_class=lc_class,
+        in_protected_area=in_pa,
+        terrain_score=terrain_score,
+        slope_pct=slope_pct,
+        eco=eco,
+        confidence_score=confidence_score,
+    )
+
     agent_analysis = AgentAnalysis(
         agents=[_to_pydantic_agent(a) for a in agents_out],
         coordinator=CoordinatorOutput(
@@ -405,6 +475,8 @@ async def site_analysis(req: SiteAnalysisRequest) -> SiteAnalysisResponse:
         agentAnalysis=agent_analysis,
         economicMetrics=_eco_to_schema(eco),
         developmentOutlook=_outlook_to_schema(risk_reg, fitness_result, outlook_result),
+        evidenceQuality=_evidence_quality_to_schema(ev_quality),
+        informationValue=_info_value_to_schema(info_value),
         debug={**sources_debug},
     )
 
